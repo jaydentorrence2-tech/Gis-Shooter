@@ -605,13 +605,18 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   if (cloudUser) {
                     try {
                       await onCloudAdminSaveScore(entry);
-                      notify(`Saved custom score for ${entry.callsign} (${entry.score.toLocaleString()}) to Cloud & Local.`);
+                      notify(`Saved custom score for ${entry.callsign} (${entry.score.toLocaleString()}) to Global Cloud & Local.`);
                       return;
-                    } catch {
-                      // fallback notice below
+                    } catch (err) {
+                      notify(
+                        `Saved locally only (Cloud error: ${
+                          err instanceof Error ? err.message : 'permission denied'
+                        }).`
+                      );
+                      return;
                     }
                   }
-                  notify(`Saved custom score for ${entry.callsign} (${entry.score.toLocaleString()}).`);
+                  notify(`Saved locally only for ${entry.callsign} — Sign in with Google to sync globally.`);
                 }}
                 className="bg-[#0C1017] border border-slate-800 rounded-xl p-4 space-y-3"
               >

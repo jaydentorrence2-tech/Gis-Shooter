@@ -488,6 +488,7 @@ export function generateStandaloneHtml(): string {
         <div id="lb-summary" class="font-mono" style="font-size:12px;color:#cbd5e1;"></div>
       </div>
       <div id="lb-auth-err" class="font-mono" style="display:none;margin:10px 24px 0;padding:10px 12px;border-radius:10px;background:rgba(136,19,55,0.45);border:1px solid rgba(244,63,94,0.45);color:#fecdd3;font-size:11px;line-height:1.5;"></div>
+      <div id="lb-local-warn" class="font-mono" style="display:none;margin:10px 24px 0;padding:9px 12px;border-radius:10px;background:rgba(120,53,15,0.4);border:1px solid rgba(245,158,11,0.4);color:#fde68a;font-size:11px;line-height:1.45;">Skor berlabel <strong>LOCAL ONLY</strong> hanya tersimpan di browser ini. Klik <strong>Sign In with Google</strong> agar skor tersinkron ke Vercel &amp; perangkat lain.</div>
       <div id="lb-body" style="flex:1;overflow-y:auto;padding:8px 24px 16px;"></div>
       <div style="padding:12px 24px;border-top:1px solid #1e293b;background:#0B101B;display:flex;justify-content:space-between;align-items:center;gap:12px;">
         <span id="lb-foot-note" class="font-mono" style="font-size:11px;color:#64748b;">Local scores persist in browser storage</span>
@@ -3156,11 +3157,49 @@ export function generateStandaloneHtml(): string {
 
     // Leaderboard UI & Game Over Debrief Handlers
     let lbTab = 'global', currentLbRows = [], cloudSyncMsg = '', cloudSyncStatus = 'idle', lastSavedMatchRec = null;
+    let lastAutoCloudKey = '';
+    async function tryAutoSyncLocalBest() {
+      const cl = window.__GIS_CLOUD__;
+      if (!cl || !cl.user || cl.status !== 'live') return;
+      const activeCs = (profile.callsign || 'OPERATIVE').trim().toUpperCase();
+      const activeKey = activeCs.replace(/\s+/g, '_').replace(/[^A-Z0-9_\-]/g, '').slice(0, 16) || 'OPERATIVE';
+      const localBest = loadLocalLb().filter(e => (e.callsign || '').trim().toUpperCase() === activeCs).sort((a,b) => b.score - a.score)[0];
+      const bestScore = Math.max(localBest ? localBest.score : 0, profile.highScore || 0);
+      if (bestScore <= 0) return;
+      const ex = (cl.entries || []).find(c => ((c.callsign || '').trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_\-]/g, '').slice(0, 16) === activeKey));
+      if (ex && ((ex.ownerUid && ex.ownerUid !== cl.user.uid) || ex.score >= bestScore)) return;
+      const syncTag = cl.user.uid + ':' + activeKey + ':' + bestScore;
+      if (lastAutoCloudKey === syncTag) return;
+      lastAutoCloudKey = syncTag;
+      const accPct = localBest ? localBest.accuracy : (profile.totalShots > 0 ? Math.min(100, Math.round((profile.totalHits / profile.totalShots) * 100)) : 0);
+      try {
+        await cl.upsertScore({
+          callsign: activeCs,
+          countryCode: localBest ? localBest.countryCode : 'ID',
+          flag: localBest ? localBest.flag : '🇮🇩',
+          score: bestScore,
+          wave: localBest ? localBest.wave : (profile.highestWave || 1),
+          kills: localBest ? localBest.kills : profile.totalKills,
+          headshots: localBest ? localBest.headshots : profile.totalHeadshots,
+          accuracy: accPct,
+          survivalSec: localBest ? localBest.survivalSec : Math.max(60, (profile.highestWave || 1) * 55),
+          xpEarned: localBest ? localBest.xpEarned : profile.xp,
+          level: localBest ? localBest.level : profile.level,
+          avatarColor: localBest ? localBest.avatarColor : profile.accentColor,
+          favoriteWeapon: localBest ? localBest.favoriteWeapon : 'AR-X7 Tactical',
+          weekKey: localBest ? localBest.weekKey : undefined,
+          hasPin: !!(cl.operativeAccount && cl.operativeAccount.pinHash)
+        });
+      } catch(e) {}
+    }
+
     function renderLeaderboard() {
       const b = getMergedLb(lbTab), cl = window.__GIS_CLOUD__;
       currentLbRows = b.rows;
       const gBtn = document.getElementById('lb-google-btn');
       if (gBtn) gBtn.style.display = (cl && !cl.user) ? 'inline-flex' : 'none';
+      const lw = document.getElementById('lb-local-warn');
+      if (lw) lw.style.display = (cl && !cl.user && b.rows.some(r => r.isPlayer && !r.isCloud)) ? 'block' : 'none';
       const stTxt = cl && cl.status === 'live' ? ('Live Cloud (' + b.cloudCount + ' Players)') : (cl && cl.status === 'connecting' ? 'Connecting to Cloud...' : 'Offline Cache');
       document.getElementById('lb-season').innerText = 'Global Cloud & Local Operative Rankings · Season ' + b.wk + ' · ' + stTxt;
       document.getElementById('lb-tabs').innerHTML = [['global','Global Top 100'],['personal','Personal Best'],['weekly','Weekly Season']].map(([id, lbl]) =>
@@ -3180,7 +3219,7 @@ export function generateStandaloneHtml(): string {
           const hl = r.isMe || (lbTab === 'personal' && r.isPlayer);
           const rc = r.rank===1 ? '#fbbf24' : r.rank===2 ? '#e2e8f0' : r.rank===3 ? '#d97706' : '#94a3b8';
           return '<tr class="lb-row-btn '+(hl?'lb-row-me':'')+'" onclick="openOpProfile('+idx+')" title="Inspect '+r.callsign+' Operator Profile"><td style="font-weight:700;color:'+rc+';">#'+r.rank+'</td>' +
-            '<td><span>'+r.flag+'</span> <strong style="color:'+(hl?'#67e8f9':'#f8fafc')+';">'+r.callsign+'</strong>'+(r.isCloud?' <span style="font-size:10px;color:#34d399;">· CLOUD</span>':'')+(r.isMe?' <span style="font-size:10px;color:#22d3ee;">· YOU</span>':'')+'</td>' +
+            '<td><span>'+r.flag+'</span> <strong style="color:'+(hl?'#67e8f9':'#f8fafc')+';">'+r.callsign+'</strong>'+(r.isCloud?' <span style="font-size:10px;color:#34d399;">· CLOUD</span>':(r.isPlayer?' <span style="font-size:10px;color:#fbbf24;">· LOCAL ONLY</span>':''))+(r.isMe?' <span style="font-size:10px;color:#22d3ee;">· YOU</span>':'')+'</td>' +
             '<td style="text-align:right;color:#cbd5e1;">W'+r.wave+'</td>' +
             '<td style="text-align:right;font-weight:700;">'+r.kills+'</td>' +
             '<td style="text-align:right;color:#34d399;">'+r.accuracy+'%</td>' +
@@ -3200,6 +3239,7 @@ export function generateStandaloneHtml(): string {
       }
     };
     window.addEventListener('gis-cloud-update', () => {
+      void tryAutoSyncLocalBest();
       if (document.getElementById('modal-leaderboard').style.display === 'flex') renderLeaderboard();
       if (document.getElementById('modal-profile').style.display === 'flex') { refreshProfileCloudUI(); runCallsignCheck(); }
       if (document.getElementById('modal-admin').style.display === 'flex') renderAdminConsole();
@@ -3505,9 +3545,14 @@ export function generateStandaloneHtml(): string {
       e.preventDefault();
       const rec = addCustomLbScore(document.getElementById('adm-cs-in').value, Number(document.getElementById('adm-sc-in').value)||0, Number(document.getElementById('adm-wv-in').value)||1, Number(document.getElementById('adm-kl-in').value)||0, Number(document.getElementById('adm-ac-in').value)||0);
       if (window.__GIS_CLOUD__ && window.__GIS_CLOUD__.user) {
-        try { await window.__GIS_CLOUD__.upsertScore(rec, true); } catch(ex) {}
+        try {
+          const res = await window.__GIS_CLOUD__.upsertScore(rec, true);
+          setAdminNotice(res && res.status === 'error' ? ('Local saved · Cloud: ' + res.message) : ('Saved to Global Cloud & Local: ' + rec.callsign));
+          renderAdminConsole();
+          return;
+        } catch(ex) {}
       }
-      setAdminNotice('Saved custom score for ' + rec.callsign); renderAdminConsole();
+      setAdminNotice('Saved locally only for ' + rec.callsign + ' (Sign in with Google to sync globally)'); renderAdminConsole();
     };
 
     document.getElementById('btn-menu-admin').onclick = openAdminGate;

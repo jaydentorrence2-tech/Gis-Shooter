@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Trophy, X, Medal, Calendar, UserCheck, Globe, Crosshair, ChevronRight, LogIn } from 'lucide-react';
+import { Trophy, X, Medal, Calendar, UserCheck, Globe, Crosshair, ChevronRight, LogIn, CloudOff } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import {
   formatSurvivalTime,
@@ -218,6 +218,17 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           </div>
         )}
 
+        {!cloudUser && board.rows.some((r) => r.isPlayer && !r.isCloud) && (
+          <div className="mx-6 mt-3 px-3.5 py-2.5 rounded-xl bg-amber-950/40 border border-amber-500/35 flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0">
+            <div className="flex items-center gap-2 text-amber-200 min-w-0">
+              <CloudOff className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                Skor berlabel <strong className="font-mono-tech">LOCAL ONLY</strong> hanya tersimpan di browser ini. Login Google agar otomatis tersinkron ke Vercel &amp; perangkat lain.
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Scrollable Rankings Table */}
         <div className="flex-1 overflow-y-auto px-6 py-3">
           {board.rows.length === 0 ? (
@@ -282,11 +293,15 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                           >
                             {row.callsign}
                           </span>
-                          {row.isCloud && (
+                          {row.isCloud ? (
                             <span className="text-[10px] font-mono-tech font-semibold text-emerald-400 shrink-0">
                               · CLOUD
                             </span>
-                          )}
+                          ) : row.isPlayer ? (
+                            <span className="text-[10px] font-mono-tech font-semibold text-amber-400 shrink-0">
+                              · LOCAL ONLY
+                            </span>
+                          ) : null}
                           {row.isActivePlayer && (
                             <span className="text-[10px] font-mono-tech font-semibold text-cyan-400 shrink-0">
                               · YOU

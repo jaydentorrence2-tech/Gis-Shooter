@@ -10,7 +10,7 @@ import {
   DEFAULT_PROFILE,
 } from './game/GameEngine';
 import { LobbyFocusMode } from './game/lobby';
-import type { LeaderboardEntry } from './game/leaderboard';
+import { loadLocalScores, type LeaderboardEntry } from './game/leaderboard';
 import { HUD } from './components/HUD';
 import { MainMenu } from './components/MainMenu';
 import { ArmoryModal } from './components/ArmoryModal';
@@ -35,6 +35,7 @@ import {
   type CloudUpsertResult,
   deleteCloudLeaderboardEntry,
   fetchOperativeAccount,
+  normalizeCallsignKey,
   type OperativeAccountDoc,
   subscribeCloudLeaderboard,
   upsertCloudPersonalBest,
@@ -63,6 +64,7 @@ export default function App() {
     status: 'idle' | 'syncing' | CloudUpsertResult['status'];
     message?: string;
   }>({ status: 'idle' });
+  const autoSyncedKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
@@ -89,6 +91,55 @@ export default function App() {
       unsubBoard();
     };
   }, []);
+
+  // Automatically promote local-only Personal Best for active callsign to Global Cloud once signed in
+  useEffect(() => {
+    if (!cloudUser || cloudStatus !== 'live') return;
+    const activeCs = (profile.callsign || 'OPERATIVE').trim().toUpperCase();
+    const activeKey = normalizeCallsignKey(activeCs);
+    const localBest = loadLocalScores()
+      .filter((e) => e.callsign.trim().toUpperCase() === activeCs)
+      .sort((a, b) => b.score - a.score)[0];
+
+    const bestScore = Math.max(localBest?.score ?? 0, profile.highScore || 0);
+    if (bestScore <= 0) return;
+
+    const existingCloud = cloudEntries.find(
+      (c) => normalizeCallsignKey(c.callsign) === activeKey
+    );
+    if (existingCloud) {
+      if (existingCloud.ownerUid && existingCloud.ownerUid !== cloudUser.uid) return;
+      if (existingCloud.score >= bestScore) return;
+    }
+
+    const syncTag = `${cloudUser.uid}:${activeKey}:${bestScore}`;
+    if (autoSyncedKeysRef.current.has(syncTag)) return;
+    autoSyncedKeysRef.current.add(syncTag);
+
+    const acc =
+      localBest?.accuracy ??
+      (profile.totalShots > 0
+        ? Math.min(100, Math.round((profile.totalHits / profile.totalShots) * 100))
+        : 0);
+
+    void upsertCloudPersonalBest(cloudUser, {
+      callsign: activeCs,
+      countryCode: localBest?.countryCode || 'ID',
+      flag: localBest?.flag || '🇮🇩',
+      score: bestScore,
+      wave: localBest?.wave || profile.highestWave || 1,
+      kills: localBest?.kills ?? profile.totalKills,
+      headshots: localBest?.headshots ?? profile.totalHeadshots,
+      accuracy: acc,
+      survivalSec: localBest?.survivalSec ?? Math.max(60, (profile.highestWave || 1) * 55),
+      xpEarned: localBest?.xpEarned ?? profile.xp,
+      level: localBest?.level ?? profile.level,
+      avatarColor: localBest?.avatarColor ?? profile.accentColor,
+      favoriteWeapon: localBest?.favoriteWeapon ?? 'AR-X7 Tactical',
+      weekKey: localBest?.weekKey,
+      hasPin: Boolean(operativeAccount?.pinHash),
+    });
+  }, [cloudUser, cloudStatus, cloudEntries, profile, operativeAccount]);
 
   useEffect(() => {
     if (!canvasMountRef.current) return;
