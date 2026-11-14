@@ -1,0 +1,6 @@
+{
+  "name": "GIS Shooter - 3D FPS Game",
+  "description": "Tactical 3D First-Person Shooter (FPS) sci-fi combat game powered by Three.js and Web Audio API with weapons, AI bots, dynamic HUD, radar, and player profile stats.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
