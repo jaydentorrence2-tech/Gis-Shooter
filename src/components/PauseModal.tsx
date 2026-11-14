@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { PlayerProfileData } from '../game/GameEngine';
+import { GraphicsPreset, PlayerProfileData } from '../game/GameEngine';
 import { Play, Volume2, VolumeX, RotateCcw, Home, Target } from 'lucide-react';
 import { soundSystem } from '../audio/SoundSystem';
 import { CrosshairEditorModal } from './CrosshairEditorModal';
@@ -16,6 +16,12 @@ interface PauseModalProps {
   onReturnToMenu: () => void;
   onUpdateProfile: (updates: Partial<PlayerProfileData>) => void;
 }
+
+const PRESET_TABS: { id: GraphicsPreset; label: string; tag: string }[] = [
+  { id: 'high', label: 'High', tag: 'Ultra Tactical' },
+  { id: 'medium', label: 'Medium', tag: 'Balanced' },
+  { id: 'potato', label: 'Potato Mode', tag: 'Max FPS' },
+];
 
 export const PauseModal: React.FC<PauseModalProps> = ({
   profile,
@@ -44,7 +50,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/85 p-4 select-none">
-      <div className="max-w-md w-full bg-[#131A26] border border-slate-700/80 rounded-2xl p-6 shadow-2xl text-slate-100">
+      <div className="max-w-md w-full max-h-[92vh] overflow-y-auto bg-[#131A26] border border-slate-700/80 rounded-2xl p-6 shadow-2xl text-slate-100">
         <div className="text-center mb-5">
           <div className="text-xs font-mono-tech text-cyan-400 uppercase tracking-wider">
             Combat Suspended
@@ -52,12 +58,51 @@ export const PauseModal: React.FC<PauseModalProps> = ({
           <h2 className="text-2xl font-display font-bold text-white mt-0.5">Paused</h2>
         </div>
 
-        <div className="space-y-3 mb-6">
+        <div className="space-y-3 mb-5">
+          {/* Graphics Preset */}
+          <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3.5">
+            <div className="flex justify-between items-center text-xs mb-2">
+              <span className="text-slate-300 font-medium">Graphics Preset</span>
+              <span
+                className={`font-mono-tech font-bold uppercase ${
+                  profile.graphicsPreset === 'potato'
+                    ? 'text-emerald-400'
+                    : profile.graphicsPreset === 'medium'
+                    ? 'text-amber-400'
+                    : 'text-cyan-400'
+                }`}
+              >
+                {PRESET_TABS.find((t) => t.id === profile.graphicsPreset)?.tag || 'Ultra Tactical'}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-900 rounded-lg border border-slate-800">
+              {PRESET_TABS.map((opt) => {
+                const active = profile.graphicsPreset === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => onUpdateProfile({ graphicsPreset: opt.id })}
+                    className={`px-2 py-1.5 rounded-md text-xs font-semibold transition whitespace-nowrap shrink-0 cursor-pointer ${
+                      active
+                        ? opt.id === 'potato'
+                          ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                          : 'bg-cyan-500 text-slate-950 shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Sensitivity */}
           <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3.5">
             <div className="flex justify-between text-xs mb-1.5">
               <span className="text-slate-300 font-medium">Mouse Sensitivity</span>
-              <span className="font-mono-tech font-bold text-cyan-400">
+              <span className="font-mono-tech font-bold text-cyan-400 tabular-nums">
                 {profile.mouseSensitivity.toFixed(1)}x
               </span>
             </div>
@@ -76,7 +121,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
           <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3.5">
             <div className="flex justify-between text-xs mb-1.5">
               <span className="text-slate-300 font-medium">Field of View (FOV)</span>
-              <span className="font-mono-tech font-bold text-amber-400">{profile.baseFov}°</span>
+              <span className="font-mono-tech font-bold text-amber-400 tabular-nums">{profile.baseFov}°</span>
             </div>
             <input
               type="range"
@@ -94,7 +139,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
             <div className="flex justify-between items-center text-xs mb-1.5">
               <span className="text-slate-300 font-medium">Master Volume</span>
               <div className="flex items-center gap-2">
-                <span className="font-mono-tech font-bold text-emerald-400">
+                <span className="font-mono-tech font-bold text-emerald-400 tabular-nums">
                   {isMuted ? 'MUTED' : `${Math.round(profile.masterVolume * 100)}%`}
                 </span>
                 <button

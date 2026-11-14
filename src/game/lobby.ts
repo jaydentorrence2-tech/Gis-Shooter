@@ -131,6 +131,12 @@ export class TacticalLobby {
   private visorMat: THREE.MeshStandardMaterial;
   private accentRingMat: THREE.MeshStandardMaterial;
   private podiumLight: THREE.PointLight;
+  private hemiLight: THREE.HemisphereLight;
+  private keyLight: THREE.DirectionalLight;
+  private rimLight: THREE.DirectionalLight;
+  private fillLight: THREE.PointLight;
+  private ambientLight: THREE.AmbientLight;
+  private pmremTex: THREE.Texture | null = null;
 
   private holoModelGroup: THREE.Group;
   private droneGroup: THREE.Group;
@@ -166,40 +172,45 @@ export class TacticalLobby {
     this.scene.fog = new THREE.FogExp2(0x070b12, 0.014);
 
     const pmrem = new THREE.PMREMGenerator(renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.pmremTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environment = this.pmremTex;
     pmrem.dispose();
 
     this.camera = new THREE.PerspectiveCamera(48, aspect, 0.1, 260);
 
-    // --- 1. Three-Point Studio Hangar Lighting ---
-    const hemi = new THREE.HemisphereLight(0x38bdf8, 0x0b1019, 0.72);
-    this.scene.add(hemi);
+    // --- 1. Three-Point Studio Hangar Lighting + Potato Ambient Fallback ---
+    this.ambientLight = new THREE.AmbientLight(0xdbeafe, 1.25);
+    this.ambientLight.visible = false;
+    this.scene.add(this.ambientLight);
+
+    this.hemiLight = new THREE.HemisphereLight(0x38bdf8, 0x0b1019, 0.72);
+    this.scene.add(this.hemiLight);
 
     // Warm Key Light above podium
-    const keyLight = new THREE.DirectionalLight(0xfde68a, 2.05);
-    keyLight.position.set(4.5, 8.5, 5.5);
-    keyLight.castShadow = !isSoftwareGl;
-    keyLight.shadow.mapSize.width = 2048;
-    keyLight.shadow.mapSize.height = 2048;
-    keyLight.shadow.camera.near = 0.5;
-    keyLight.shadow.camera.far = 28;
-    keyLight.shadow.camera.left = -10;
-    keyLight.shadow.camera.right = 10;
-    keyLight.shadow.camera.top = 10;
-    keyLight.shadow.camera.bottom = -10;
-    keyLight.shadow.bias = -0.0004;
-    keyLight.shadow.normalBias = 0.02;
-    this.scene.add(keyLight);
+    this.keyLight = new THREE.DirectionalLight(0xfde68a, 2.05);
+    this.keyLight.position.set(4.5, 8.5, 5.5);
+    this.keyLight.castShadow = !isSoftwareGl;
+    this.keyLight.shadow.mapSize.width = 2048;
+    this.keyLight.shadow.mapSize.height = 2048;
+    this.keyLight.shadow.camera.near = 0.5;
+    this.keyLight.shadow.camera.far = 28;
+    this.keyLight.shadow.camera.left = -10;
+    this.keyLight.shadow.camera.right = 10;
+    this.keyLight.shadow.camera.top = 10;
+    this.keyLight.shadow.camera.bottom = -10;
+    this.keyLight.shadow.bias = -0.0004;
+    this.keyLight.shadow.normalBias = 0.02;
+    this.scene.add(this.keyLight);
 
     // Cool Rim Light behind the Blast Door / Operator silhouette
-    const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.35);
-    rimLight.position.set(-3.5, 5.2, -7.2);
-    this.scene.add(rimLight);
+    this.rimLight = new THREE.DirectionalLight(0x38bdf8, 1.35);
+    this.rimLight.position.set(-3.5, 5.2, -7.2);
+    this.scene.add(this.rimLight);
 
     // Soft Fill from left holo-table flank
-    const fillLight = new THREE.PointLight(0x06b6d4, 6.5, 16, 2);
-    fillLight.position.set(-4.2, 2.4, 2.5);
-    this.scene.add(fillLight);
+    this.fillLight = new THREE.PointLight(0x06b6d4, 6.5, 16, 2);
+    this.fillLight.position.set(-4.2, 2.4, 2.5);
+    this.scene.add(this.fillLight);
 
     // --- 2. Exterior Cyber-Night Sky & Megacity Skyline ---
     const skyTex = createSkyDomeTexture();
@@ -1035,6 +1046,46 @@ export class TacticalLobby {
     this.podiumLight.color.copy(col);
   }
 
+  public setGraphicsPreset(
+    preset: 'high' | 'medium' | 'potato',
+    isSoftwareGl: boolean,
+    renderer?: THREE.WebGLRenderer
+  ) {
+    if (renderer) {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      this.pmremTex?.dispose();
+      this.pmremTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+    }
+
+    if (preset === 'potato') {
+      this.dustPoints.visible = false;
+      this.ambientLight.visible = true;
+      this.hemiLight.visible = false;
+      this.rimLight.visible = false;
+      this.fillLight.intensity = 0;
+      this.podiumLight.intensity = 0;
+      this.keyLight.castShadow = false;
+      this.keyLight.intensity = 1.35;
+      this.scene.environment = null;
+      this.scene.fog = new THREE.Fog(0x070b12, 8, 28);
+      this.camera.far = 90;
+    } else {
+      this.dustPoints.visible = true;
+      this.ambientLight.visible = false;
+      this.hemiLight.visible = true;
+      this.rimLight.visible = true;
+      this.fillLight.intensity = 6.5;
+      this.podiumLight.intensity = 5.5;
+      this.keyLight.castShadow = !isSoftwareGl;
+      this.keyLight.intensity = 2.05;
+      this.scene.environment = this.pmremTex;
+      this.scene.fog = new THREE.FogExp2(0x070b12, 0.014);
+      this.camera.far = preset === 'medium' ? 180 : 260;
+    }
+    this.camera.updateProjectionMatrix();
+  }
+
   // --- Mouse Drag Orbit & Wheel Zoom Handlers ---
   public handlePointerDown(clientX: number, clientY: number) {
     this.isDragging = true;
@@ -1124,20 +1175,22 @@ export class TacticalLobby {
       this.beaconMeshes[i].scale.setScalar(0.85 + pulse * 0.35);
     }
 
-    // 6. Floating Dust Motes Drift
-    const posAttr = this.dustPoints.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const arr = posAttr.array as Float32Array;
-    for (let i = 0; i < arr.length; i += 3) {
-      arr[i] += this.dustVelocities[i] * delta;
-      arr[i + 1] += this.dustVelocities[i + 1] * delta;
-      arr[i + 2] += this.dustVelocities[i + 2] * delta;
-      if (arr[i + 1] > 7.2) arr[i + 1] = 0.3;
-      if (arr[i] > 9) arr[i] = -9;
-      if (arr[i] < -9) arr[i] = 9;
-      if (arr[i + 2] > 8) arr[i + 2] = -8;
-      if (arr[i + 2] < -8) arr[i + 2] = 8;
+    // 6. Floating Dust Motes Drift (skipped in Potato Mode)
+    if (this.dustPoints.visible) {
+      const posAttr = this.dustPoints.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const arr = posAttr.array as Float32Array;
+      for (let i = 0; i < arr.length; i += 3) {
+        arr[i] += this.dustVelocities[i] * delta;
+        arr[i + 1] += this.dustVelocities[i + 1] * delta;
+        arr[i + 2] += this.dustVelocities[i + 2] * delta;
+        if (arr[i + 1] > 7.2) arr[i + 1] = 0.3;
+        if (arr[i] > 9) arr[i] = -9;
+        if (arr[i] < -9) arr[i] = 9;
+        if (arr[i + 2] > 8) arr[i + 2] = -8;
+        if (arr[i + 2] < -8) arr[i + 2] = 8;
+      }
+      posAttr.needsUpdate = true;
     }
-    posAttr.needsUpdate = true;
 
     // 7. Smooth Exponential Camera Damping
     const alpha = 1 - Math.exp(-7.5 * delta);

@@ -291,8 +291,38 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
         </div>
       </div>
 
-      {/* 4. Top-Right: Kill Feed */}
+      {/* 4. Top-Right: Real-Time FPS Counter & Kill Feed */}
       <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5 max-w-sm">
+        <div className="bg-[#0C1017]/90 border border-slate-700/80 rounded-lg px-3 py-1.5 flex items-center gap-2.5 text-xs font-mono-tech tabular-nums shadow-lg">
+          <span
+            className={`font-bold ${
+              state.fps >= 50
+                ? 'text-emerald-400'
+                : state.fps >= 30
+                ? 'text-amber-400'
+                : 'text-rose-400'
+            }`}
+          >
+            {state.fps} FPS
+          </span>
+          <span className="text-slate-600" aria-hidden="true">·</span>
+          <span className="text-slate-300 font-semibold">
+            {state.fps >= 50 ? 'OPTIMAL' : state.fps >= 30 ? 'STABLE' : 'LOW'}
+          </span>
+          <span className="text-slate-600" aria-hidden="true">·</span>
+          <span
+            className={`font-semibold uppercase ${
+              profile.graphicsPreset === 'potato'
+                ? 'text-emerald-300'
+                : profile.graphicsPreset === 'medium'
+                ? 'text-amber-300'
+                : 'text-cyan-300'
+            }`}
+          >
+            {profile.graphicsPreset === 'potato' ? 'POTATO' : profile.graphicsPreset}
+          </span>
+        </div>
+
         {state.killFeed.map((item) => (
           <div
             key={item.id}

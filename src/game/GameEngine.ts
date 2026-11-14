@@ -88,6 +88,7 @@ export interface GameState {
     percent: number;
     label: string;
   } | null;
+  fps: number;
   radarData: {
     playerX: number;
     playerZ: number;
@@ -96,6 +97,8 @@ export interface GameState {
     rects: RadarRect[];
   };
 }
+
+export type GraphicsPreset = 'high' | 'medium' | 'potato';
 
 export type CrosshairStyle = 'classic' | 'dot' | 'circle' | 'cross_dot';
 
@@ -140,6 +143,7 @@ export interface PlayerProfileData {
   accentColor: string;
   preferredSlot: number;
   crosshair: CrosshairConfig;
+  graphicsPreset: GraphicsPreset;
   achievements: string[];
   bossDefeatedCount: number;
 }
@@ -161,6 +165,7 @@ export const DEFAULT_PROFILE: PlayerProfileData = {
   accentColor: '#06b6d4',
   preferredSlot: 0,
   crosshair: { ...DEFAULT_CROSSHAIR },
+  graphicsPreset: 'high',
   achievements: [],
   bossDefeatedCount: 0,
 };
@@ -176,11 +181,22 @@ export function getRankTitle(level: number): string {
 export class GameEngine {
   private container: HTMLElement;
   private renderer: THREE.WebGLRenderer;
+  private currentAntialias: boolean;
   private isSoftwareGl: boolean;
   private scene: THREE.Scene;
+  private scenePmremTex: THREE.Texture | null = null;
   private camera: THREE.PerspectiveCamera;
   private controls: PointerLockControls;
   private clock: THREE.Clock;
+
+  // Lighting & Material Optimization Pools
+  private arenaAmbientLight: THREE.AmbientLight;
+  private arenaHemiLight: THREE.HemisphereLight;
+  private arenaSunLight: THREE.DirectionalLight;
+  private arenaRimLight: THREE.DirectionalLight;
+  private arenaPointLights: { light: THREE.PointLight; baseIntensity: number }[] = [];
+  private originalMaterials = new WeakMap<THREE.Mesh, THREE.Material | THREE.Material[]>();
+  private lambertMaterials = new WeakMap<THREE.Material, THREE.MeshLambertMaterial>();
 
   // World, Lobby & VFX
   private arena: TacticalArena;
@@ -290,6 +306,9 @@ export class GameEngine {
   private vampireHealSeq = 0;
   private matchWeaponKills: Record<string, number> = {};
   private contextLost = false;
+  private fpsFrames = 0;
+  private fpsLastSample = performance.now();
+  private currentFps = 60;
 
   constructor(
     container: HTMLElement,
@@ -320,27 +339,29 @@ export class GameEngine {
     })();
 
     // 2. Renderer Setup
+    const initAntialias = this.profile.graphicsPreset !== 'potato' && !this.isSoftwareGl;
+    this.currentAntialias = initAntialias;
     this.renderer = new THREE.WebGLRenderer({
-      antialias: !this.isSoftwareGl,
+      antialias: initAntialias,
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
-    this.renderer.setPixelRatio(this.isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(
+      this.profile.graphicsPreset === 'potato'
+        ? 0.75
+        : this.profile.graphicsPreset === 'medium' || this.isSoftwareGl
+        ? 1
+        : Math.min(window.devicePixelRatio, 2)
+    );
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
-    this.renderer.shadowMap.enabled = !this.isSoftwareGl;
+    this.renderer.shadowMap.enabled = this.profile.graphicsPreset !== 'potato' && !this.isSoftwareGl;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
-    // Context lost/restored safety
-    this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
-      e.preventDefault();
-      this.contextLost = true;
-    });
-    this.renderer.domElement.addEventListener('webglcontextrestored', () => {
-      this.contextLost = false;
-    });
+    this.renderer.domElement.addEventListener('webglcontextlost', this.onContextLost);
+    this.renderer.domElement.addEventListener('webglcontextrestored', this.onContextRestored);
 
     // 3. Scene & Cyber Night Fog
     this.scene = new THREE.Scene();
@@ -348,7 +369,8 @@ export class GameEngine {
     this.scene.fog = new THREE.FogExp2(0x0c1017, 0.014);
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scenePmremTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environment = this.scenePmremTex;
     pmrem.dispose();
 
     // 4. Camera & PointerLockControls
@@ -365,29 +387,33 @@ export class GameEngine {
     this.controls = new PointerLockControls(this.camera, this.renderer.domElement);
     this.controls.pointerSpeed = this.profile.mouseSensitivity;
 
-    // 5. Balanced 3-Point Cyber-Night Lighting
-    const hemiLight = new THREE.HemisphereLight(0x38bdf8, 0x0f172a, 0.72);
-    this.scene.add(hemiLight);
+    // 5. Balanced 3-Point Cyber-Night Lighting + Potato Mode Ambient Fallback
+    this.arenaAmbientLight = new THREE.AmbientLight(0xdbeafe, 1.35);
+    this.arenaAmbientLight.visible = false;
+    this.scene.add(this.arenaAmbientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xfef3c7, 1.85);
-    sunLight.position.set(32, 48, 22);
-    sunLight.castShadow = !this.isSoftwareGl;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.near = 0.5;
-    sunLight.shadow.camera.far = 130;
+    this.arenaHemiLight = new THREE.HemisphereLight(0x38bdf8, 0x0f172a, 0.72);
+    this.scene.add(this.arenaHemiLight);
+
+    this.arenaSunLight = new THREE.DirectionalLight(0xfef3c7, 1.85);
+    this.arenaSunLight.position.set(32, 48, 22);
+    this.arenaSunLight.castShadow = !this.isSoftwareGl;
+    this.arenaSunLight.shadow.mapSize.width = 2048;
+    this.arenaSunLight.shadow.mapSize.height = 2048;
+    this.arenaSunLight.shadow.camera.near = 0.5;
+    this.arenaSunLight.shadow.camera.far = 130;
     const d = 46;
-    sunLight.shadow.camera.left = -d;
-    sunLight.shadow.camera.right = d;
-    sunLight.shadow.camera.top = d;
-    sunLight.shadow.camera.bottom = -d;
-    sunLight.shadow.bias = -0.0004;
-    sunLight.shadow.normalBias = 0.02;
-    this.scene.add(sunLight);
+    this.arenaSunLight.shadow.camera.left = -d;
+    this.arenaSunLight.shadow.camera.right = d;
+    this.arenaSunLight.shadow.camera.top = d;
+    this.arenaSunLight.shadow.camera.bottom = -d;
+    this.arenaSunLight.shadow.bias = -0.0004;
+    this.arenaSunLight.shadow.normalBias = 0.02;
+    this.scene.add(this.arenaSunLight);
 
-    const rimLight = new THREE.DirectionalLight(0x06b6d4, 0.55);
-    rimLight.position.set(-35, 24, -30);
-    this.scene.add(rimLight);
+    this.arenaRimLight = new THREE.DirectionalLight(0x06b6d4, 0.55);
+    this.arenaRimLight.position.set(-35, 24, -30);
+    this.scene.add(this.arenaRimLight);
 
     // Boss Fight Rotating Crimson Emergency Alarm Beacons
     this.bossAlarmGroup = new THREE.Group();
@@ -421,6 +447,12 @@ export class GameEngine {
     const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
     this.arena = buildTacticalArena(maxAniso);
     this.scene.add(this.arena.group);
+    this.arena.group.traverse((obj) => {
+      if ((obj as THREE.PointLight).isPointLight) {
+        const pl = obj as THREE.PointLight;
+        this.arenaPointLights.push({ light: pl, baseIntensity: pl.intensity });
+      }
+    });
 
     this.lobby = new TacticalLobby(
       this.renderer,
@@ -536,6 +568,7 @@ export class GameEngine {
       inGasHazard: false,
       bossBanner: null,
       vampireHealEvent: null,
+      fps: 60,
       radarData: {
         playerX: 0,
         playerZ: 0,
@@ -546,6 +579,7 @@ export class GameEngine {
     };
 
     this.equipWeapon(this.state.activeWeaponIndex, true);
+    this.applyGraphicsPreset(this.profile.graphicsPreset);
     this.bindEvents();
     window.addEventListener('resize', this.onResize);
 
@@ -556,14 +590,31 @@ export class GameEngine {
 
   // --- Profile Persistence ---
   private loadProfile(): PlayerProfileData {
+    let savedPreset: GraphicsPreset | null = null;
+    try {
+      const rawPreset = localStorage.getItem('GIS_SHOOTER_GRAPHICS_PRESET');
+      if (rawPreset === 'high' || rawPreset === 'medium' || rawPreset === 'potato') {
+        savedPreset = rawPreset;
+      }
+    } catch {
+      // ignore storage errors
+    }
+
     try {
       const saved = localStorage.getItem('GIS_SHOOTER_TACTICAL_PROFILE');
       if (saved) {
         const parsed = JSON.parse(saved);
+        const parsedPreset: GraphicsPreset =
+          parsed.graphicsPreset === 'potato' ||
+          parsed.graphicsPreset === 'medium' ||
+          parsed.graphicsPreset === 'high'
+            ? parsed.graphicsPreset
+            : savedPreset || DEFAULT_PROFILE.graphicsPreset;
         return {
           ...DEFAULT_PROFILE,
           ...parsed,
           crosshair: { ...DEFAULT_CROSSHAIR, ...(parsed.crosshair || {}) },
+          graphicsPreset: parsedPreset,
           achievements: Array.isArray(parsed.achievements) ? parsed.achievements : [],
           bossDefeatedCount: typeof parsed.bossDefeatedCount === 'number' ? parsed.bossDefeatedCount : 0,
         };
@@ -571,7 +622,12 @@ export class GameEngine {
     } catch {
       // ignore storage errors
     }
-    return { ...DEFAULT_PROFILE, crosshair: { ...DEFAULT_CROSSHAIR }, achievements: [] };
+    return {
+      ...DEFAULT_PROFILE,
+      crosshair: { ...DEFAULT_CROSSHAIR },
+      graphicsPreset: savedPreset || DEFAULT_PROFILE.graphicsPreset,
+      achievements: [],
+    };
   }
 
   public saveProfile(updates?: Partial<PlayerProfileData>) {
@@ -599,13 +655,163 @@ export class GameEngine {
       if (updates.preferredSlot !== undefined) {
         this.lobby.setWeapon(this.profile.preferredSlot);
       }
+      if (updates.graphicsPreset !== undefined) {
+        this.applyGraphicsPreset(this.profile.graphicsPreset);
+      }
     }
     try {
       localStorage.setItem('GIS_SHOOTER_TACTICAL_PROFILE', JSON.stringify(this.profile));
+      localStorage.setItem('GIS_SHOOTER_GRAPHICS_PRESET', this.profile.graphicsPreset);
     } catch {
       // ignore
     }
     this.onProfileChange({ ...this.profile });
+  }
+
+  // --- Graphics Preset & Live Potato Mode Optimization Engine ---
+  private toLambert(mat: THREE.Material): THREE.Material {
+    if (!(mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) return mat;
+    const cached = this.lambertMaterials.get(mat);
+    if (cached) return cached;
+    const std = mat as THREE.MeshStandardMaterial;
+    const lambert = new THREE.MeshLambertMaterial({
+      color: std.color.clone(),
+      map: std.map,
+      emissive: std.emissive.clone(),
+      emissiveMap: std.emissiveMap,
+      emissiveIntensity: std.emissiveIntensity,
+      transparent: std.transparent,
+      opacity: std.opacity,
+      side: std.side,
+      wireframe: std.wireframe,
+      depthWrite: std.depthWrite,
+      depthTest: std.depthTest,
+    });
+    this.lambertMaterials.set(mat, lambert);
+    return lambert;
+  }
+
+  private applyMaterialQuality(root: THREE.Object3D, preset: GraphicsPreset) {
+    const useSimple = preset === 'potato';
+    root.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      if (useSimple) {
+        if (!this.originalMaterials.has(mesh)) {
+          this.originalMaterials.set(mesh, mesh.material);
+        }
+        const orig = this.originalMaterials.get(mesh)!;
+        mesh.material = Array.isArray(orig)
+          ? orig.map((m) => this.toLambert(m))
+          : this.toLambert(orig);
+      } else {
+        const orig = this.originalMaterials.get(mesh);
+        if (orig) {
+          mesh.material = orig;
+        }
+      }
+    });
+  }
+
+  private recreateRenderer(antialias: boolean) {
+    if (antialias === this.currentAntialias) return;
+    this.currentAntialias = antialias;
+
+    const oldCanvas = this.renderer.domElement;
+    oldCanvas.removeEventListener('webglcontextlost', this.onContextLost);
+    oldCanvas.removeEventListener('webglcontextrestored', this.onContextRestored);
+    oldCanvas.removeEventListener('pointerdown', this.onLobbyPointerDown);
+    oldCanvas.removeEventListener('wheel', this.onLobbyWheel);
+
+    this.controls.removeEventListener('lock', this.onControlsLock);
+    this.controls.removeEventListener('unlock', this.onControlsUnlock);
+    this.controls.dispose();
+    this.renderer.dispose();
+    if (oldCanvas.parentElement === this.container) {
+      this.container.removeChild(oldCanvas);
+    }
+
+    const nextRenderer = new THREE.WebGLRenderer({
+      antialias,
+      powerPreference: 'high-performance',
+    });
+    nextRenderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    nextRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    nextRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    nextRenderer.toneMappingExposure = 1.15;
+    nextRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    this.renderer = nextRenderer;
+    this.container.appendChild(this.renderer.domElement);
+    this.renderer.domElement.addEventListener('webglcontextlost', this.onContextLost);
+    this.renderer.domElement.addEventListener('webglcontextrestored', this.onContextRestored);
+    this.renderer.domElement.addEventListener('pointerdown', this.onLobbyPointerDown);
+    this.renderer.domElement.addEventListener('wheel', this.onLobbyWheel, { passive: true });
+
+    this.controls = new PointerLockControls(this.camera, this.renderer.domElement);
+    this.controls.pointerSpeed = this.profile.mouseSensitivity;
+    this.controls.addEventListener('lock', this.onControlsLock);
+    this.controls.addEventListener('unlock', this.onControlsUnlock);
+
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scenePmremTex?.dispose();
+    this.scenePmremTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+  }
+
+  public applyGraphicsPreset(preset: GraphicsPreset) {
+    const desiredAntialias = preset !== 'potato' && !this.isSoftwareGl;
+    const recreated = desiredAntialias !== this.currentAntialias;
+    if (recreated) {
+      this.recreateRenderer(desiredAntialias);
+    }
+
+    if (preset === 'potato') {
+      this.renderer.setPixelRatio(0.75);
+      this.renderer.shadowMap.enabled = false;
+      this.arenaSunLight.castShadow = false;
+      this.arenaSunLight.intensity = 1.25;
+      this.arenaAmbientLight.visible = true;
+      this.arenaHemiLight.visible = false;
+      this.arenaRimLight.visible = false;
+      this.arenaPointLights.forEach((p) => {
+        p.light.intensity = 0;
+      });
+      this.muzzleFlashLight.intensity = 0;
+      this.bossAlarmLights.forEach((l) => {
+        l.intensity = 0;
+      });
+      this.scene.environment = null;
+      this.scene.fog = new THREE.Fog(0x0c1017, 14, 52);
+      this.camera.far = 95;
+    } else {
+      const ratio =
+        preset === 'medium' || this.isSoftwareGl ? 1.0 : Math.min(window.devicePixelRatio, 2);
+      this.renderer.setPixelRatio(ratio);
+      this.renderer.shadowMap.enabled = !this.isSoftwareGl;
+      this.arenaSunLight.castShadow = !this.isSoftwareGl;
+      this.arenaSunLight.intensity = 1.85;
+      this.arenaAmbientLight.visible = false;
+      this.arenaHemiLight.visible = true;
+      this.arenaRimLight.visible = true;
+      this.arenaPointLights.forEach((p) => {
+        p.light.intensity = p.baseIntensity;
+      });
+      this.scene.environment = this.scenePmremTex;
+      this.scene.fog = new THREE.FogExp2(0x0c1017, preset === 'medium' ? 0.015 : 0.014);
+      this.camera.far = preset === 'medium' ? 300 : 500;
+    }
+    this.camera.updateProjectionMatrix();
+
+    this.applyMaterialQuality(this.scene, preset);
+    this.applyMaterialQuality(this.lobby.scene, preset);
+    this.particles.setGraphicsPreset(preset);
+    this.lobby.setGraphicsPreset(
+      preset,
+      this.isSoftwareGl,
+      recreated ? this.renderer : undefined
+    );
+    this.emitState();
   }
 
   public setLobbyFocus(mode: LobbyFocusMode) {
@@ -620,28 +826,40 @@ export class GameEngine {
     this.lobby.setAccentColor(hex);
   }
 
+  private onContextLost = (e: Event) => {
+    e.preventDefault();
+    this.contextLost = true;
+  };
+
+  private onContextRestored = () => {
+    this.contextLost = false;
+  };
+
+  private onControlsLock = () => {
+    this.state.isPaused = false;
+    this.state.isInventoryOpen = false;
+    this.state.isInMenu = false;
+    this.weaponRig.visible = true;
+    soundSystem.stopLobbyAmbient();
+    this.emitState();
+    soundSystem.resume();
+  };
+
+  private onControlsUnlock = () => {
+    if (!this.state.isDead && !this.state.isInventoryOpen && !this.state.isInMenu) {
+      this.state.isPaused = true;
+      this.isMouseDown = false;
+      this.isAiming = false;
+      this.state.isAiming = false;
+      this.state.isScoped = false;
+      this.emitState();
+    }
+  };
+
   // --- Input Binding ---
   private bindEvents() {
-    this.controls.addEventListener('lock', () => {
-      this.state.isPaused = false;
-      this.state.isInventoryOpen = false;
-      this.state.isInMenu = false;
-      this.weaponRig.visible = true;
-      soundSystem.stopLobbyAmbient();
-      this.emitState();
-      soundSystem.resume();
-    });
-
-    this.controls.addEventListener('unlock', () => {
-      if (!this.state.isDead && !this.state.isInventoryOpen && !this.state.isInMenu) {
-        this.state.isPaused = true;
-        this.isMouseDown = false;
-        this.isAiming = false;
-        this.state.isAiming = false;
-        this.state.isScoped = false;
-        this.emitState();
-      }
-    });
+    this.controls.addEventListener('lock', this.onControlsLock);
+    this.controls.addEventListener('unlock', this.onControlsUnlock);
 
     const canvas = this.renderer.domElement;
     canvas.addEventListener('pointerdown', this.onLobbyPointerDown);
@@ -1422,7 +1640,8 @@ export class GameEngine {
     this.muzzleFlashGroup.children.forEach((c) => {
       ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = suppressed ? 0.45 : 0.95;
     });
-    this.muzzleFlashLight.intensity = suppressed ? 5 : 18;
+    this.muzzleFlashLight.intensity =
+      this.profile.graphicsPreset === 'potato' ? 0 : suppressed ? 5 : 18;
   }
 
   private triggerHitmarker(isHeadshot: boolean) {
@@ -1566,8 +1785,9 @@ export class GameEngine {
 
   private setBossAtmosphere(active: boolean) {
     this.bossAlarmGroup.visible = active;
+    const isPotato = this.profile.graphicsPreset === 'potato';
     this.bossAlarmLights.forEach((l) => {
-      l.intensity = active ? 22 : 0;
+      l.intensity = active && !isPotato ? 22 : 0;
     });
   }
 
@@ -1770,6 +1990,7 @@ export class GameEngine {
       // Wave 10 Boss Encounter: "The Specialist Anestesi"
       this.boss = new BossSpecialist(new THREE.Vector3(0, 0, -24));
       this.scene.add(this.boss.group);
+      this.applyMaterialQuality(this.boss.group, this.profile.graphicsPreset);
       this.setBossAtmosphere(true);
       this.particles.addBossEntranceMist(this.boss.position);
       soundSystem.playBossEntranceAlarm();
@@ -1816,6 +2037,7 @@ export class GameEngine {
       );
       this.enemies.push(bot);
       this.scene.add(bot.group);
+      this.applyMaterialQuality(bot.group, this.profile.graphicsPreset);
     }
 
     this.emitState();
@@ -1888,6 +2110,16 @@ export class GameEngine {
     this.animFrameId = requestAnimationFrame(this.loop);
     if (this.contextLost) return;
 
+    this.fpsFrames++;
+    const now = performance.now();
+    const fpsElapsed = now - this.fpsLastSample;
+    if (fpsElapsed >= 250) {
+      this.currentFps = Math.max(1, Math.round((this.fpsFrames * 1000) / fpsElapsed));
+      this.fpsFrames = 0;
+      this.fpsLastSample = now;
+      this.state.fps = this.currentFps;
+    }
+
     const delta = Math.min(this.clock.getDelta(), 0.1);
 
     if (this.state.isInMenu) {
@@ -1901,12 +2133,18 @@ export class GameEngine {
       this.arena.energyCores[i].rotation.y += delta * 0.9;
     }
 
-    // Pulse & rotate crimson emergency lights during Wave 10 Boss Fight
+    // Pulse & rotate crimson emergency lights during Wave 10 Boss Fight (muted in Potato Mode)
     if (this.bossAlarmGroup.visible) {
-      const pulse = 12 + Math.sin(performance.now() * 0.012) * 10;
-      this.bossAlarmLights.forEach((l, idx) => {
-        l.intensity = Math.max(4, pulse * (idx === 0 ? 1 : 0.85));
-      });
+      if (this.profile.graphicsPreset === 'potato') {
+        this.bossAlarmLights.forEach((l) => {
+          l.intensity = 0;
+        });
+      } else {
+        const pulse = 12 + Math.sin(now * 0.012) * 10;
+        this.bossAlarmLights.forEach((l, idx) => {
+          l.intensity = Math.max(4, pulse * (idx === 0 ? 1 : 0.85));
+        });
+      }
     }
 
     if (!this.state.isPaused && !this.state.isDead) {
@@ -2541,6 +2779,8 @@ export class GameEngine {
     soundSystem.stopLobbyAmbient();
     soundSystem.stopBossMusic();
     const canvas = this.renderer.domElement;
+    canvas.removeEventListener('webglcontextlost', this.onContextLost);
+    canvas.removeEventListener('webglcontextrestored', this.onContextRestored);
     canvas.removeEventListener('pointerdown', this.onLobbyPointerDown);
     window.removeEventListener('pointermove', this.onLobbyPointerMove);
     window.removeEventListener('pointerup', this.onLobbyPointerUp);
@@ -2556,6 +2796,9 @@ export class GameEngine {
 
     this.activeGrenades.forEach((g) => this.scene.remove(g.mesh));
     this.clearBossHazards();
+    this.scenePmremTex?.dispose();
+    this.controls.removeEventListener('lock', this.onControlsLock);
+    this.controls.removeEventListener('unlock', this.onControlsUnlock);
     this.controls.dispose();
     this.particles.dispose();
     this.renderer.dispose();

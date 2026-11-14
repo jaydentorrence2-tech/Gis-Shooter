@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { PlayerProfileData } from '../game/GameEngine';
+import { GraphicsPreset, PlayerProfileData } from '../game/GameEngine';
 import { X, Volume2, VolumeX } from 'lucide-react';
 import { soundSystem } from '../audio/SoundSystem';
 
@@ -14,12 +14,39 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
+const GRAPHICS_OPTIONS: {
+  id: GraphicsPreset;
+  label: string;
+  sub: string;
+  desc: string;
+}[] = [
+  {
+    id: 'high',
+    label: 'High',
+    sub: 'Ultra Tactical',
+    desc: 'Full Retina DPI, PCF soft shadows, PBR bump/metalness, and full particle VFX.',
+  },
+  {
+    id: 'medium',
+    label: 'Medium',
+    sub: 'Balanced',
+    desc: '1.0x native resolution, balanced particle count, and smooth 3-point lighting.',
+  },
+  {
+    id: 'potato',
+    label: 'Potato Mode',
+    sub: 'Max FPS',
+    desc: '0.75x scale, shadows & AA off, Lambert materials, reduced sparks, near fog.',
+  },
+];
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   profile,
   onUpdate,
   onClose,
 }) => {
   const [isMuted, setIsMuted] = useState(soundSystem.getMuted());
+  const activePreset = GRAPHICS_OPTIONS.find((o) => o.id === profile.graphicsPreset) || GRAPHICS_OPTIONS[0];
 
   const handleToggleMute = () => {
     setIsMuted(soundSystem.toggleMute());
@@ -27,7 +54,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="absolute inset-0 z-40 flex justify-end p-4 md:p-6 pointer-events-none select-none">
-      <div className="max-w-sm w-full h-fit my-auto bg-[#131A26]/95 border border-slate-700/80 rounded-2xl p-6 shadow-2xl relative text-slate-100 pointer-events-auto">
+      <div className="max-w-sm w-full h-fit max-h-[92vh] overflow-y-auto my-auto bg-[#131A26]/95 border border-slate-700/80 rounded-2xl p-6 shadow-2xl relative text-slate-100 pointer-events-auto">
         <button
           onClick={onClose}
           aria-label="Close Settings"
@@ -36,7 +63,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        <div className="mb-6">
+        <div className="mb-5">
           <div className="text-xs font-mono-tech text-cyan-400 tracking-wider uppercase">
             System Preferences
           </div>
@@ -46,11 +73,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="space-y-4 mb-6">
+          {/* Graphics Preset */}
+          <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-4">
+            <div className="flex justify-between items-center text-sm mb-2.5">
+              <span className="font-medium text-slate-200">Graphics Preset</span>
+              <span
+                className={`font-mono-tech text-xs font-bold uppercase ${
+                  profile.graphicsPreset === 'potato'
+                    ? 'text-emerald-400'
+                    : profile.graphicsPreset === 'medium'
+                    ? 'text-amber-400'
+                    : 'text-cyan-400'
+                }`}
+              >
+                {activePreset.sub}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-900 rounded-lg border border-slate-800">
+              {GRAPHICS_OPTIONS.map((opt) => {
+                const selected = profile.graphicsPreset === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => onUpdate({ graphicsPreset: opt.id })}
+                    className={`px-2 py-2 rounded-md text-xs font-semibold transition whitespace-nowrap shrink-0 cursor-pointer ${
+                      selected
+                        ? opt.id === 'potato'
+                          ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                          : 'bg-cyan-500 text-slate-950 shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2.5 text-[11px] text-slate-400 leading-relaxed">
+              {activePreset.desc}
+            </p>
+          </div>
+
           {/* Mouse Sensitivity */}
           <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-4">
             <div className="flex justify-between items-center text-sm mb-2">
               <span className="font-medium text-slate-200">Mouse Sensitivity</span>
-              <span className="font-mono-tech font-bold text-cyan-400">
+              <span className="font-mono-tech font-bold text-cyan-400 tabular-nums">
                 {profile.mouseSensitivity.toFixed(1)}x
               </span>
             </div>
@@ -69,7 +138,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-4">
             <div className="flex justify-between items-center text-sm mb-2">
               <span className="font-medium text-slate-200">Field of View (FOV)</span>
-              <span className="font-mono-tech font-bold text-amber-400">
+              <span className="font-mono-tech font-bold text-amber-400 tabular-nums">
                 {profile.baseFov}°
               </span>
             </div>
@@ -89,7 +158,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex justify-between items-center text-sm mb-2">
               <span className="font-medium text-slate-200">Master Volume</span>
               <div className="flex items-center gap-3">
-                <span className="font-mono-tech font-bold text-emerald-400">
+                <span className="font-mono-tech font-bold text-emerald-400 tabular-nums">
                   {isMuted ? 'MUTED' : `${Math.round(profile.masterVolume * 100)}%`}
                 </span>
                 <button

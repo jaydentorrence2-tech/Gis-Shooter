@@ -83,6 +83,11 @@ export class ParticleSystem {
   private floatingDamages: FloatingDamage[] = [];
   private maxFloatingDamages = 28;
 
+  // Graphics Quality Scaling
+  private particleScale = 1.0;
+  private disableShells = false;
+  private disableLights = false;
+
   // Scratch vectors (zero GC in loop)
   private _p1 = new THREE.Vector3();
   private _p2 = new THREE.Vector3();
@@ -223,8 +228,29 @@ export class ParticleSystem {
     tracer.mesh.visible = true;
   }
 
+  public setGraphicsPreset(preset: 'high' | 'medium' | 'potato') {
+    if (preset === 'potato') {
+      this.particleScale = 0.4;
+      this.disableShells = true;
+      this.disableLights = true;
+      for (let i = 0; i < this.shells.length; i++) {
+        this.shells[i].active = false;
+        this.shells[i].mesh.visible = false;
+      }
+    } else if (preset === 'medium') {
+      this.particleScale = 0.68;
+      this.disableShells = false;
+      this.disableLights = false;
+    } else {
+      this.particleScale = 1.0;
+      this.disableShells = false;
+      this.disableLights = false;
+    }
+  }
+
   public addImpactSparks(pos: THREE.Vector3, normal: THREE.Vector3, isEnemyHit = false) {
-    const count = isEnemyHit ? 20 : 12;
+    const baseCount = isEnemyHit ? 20 : 12;
+    const count = Math.max(3, Math.round(baseCount * this.particleScale));
     for (let i = 0; i < count; i++) {
       const p = this.particlePool.find((part) => !part.active);
       if (!p) break;
@@ -270,6 +296,7 @@ export class ParticleSystem {
     forward: THREE.Vector3,
     isShotgun = false
   ) {
+    if (this.disableShells) return;
     const shell = this.shells.find((s) => !s.active);
     if (!shell) return;
 
@@ -299,7 +326,7 @@ export class ParticleSystem {
   }
 
   public addExplosion(pos: THREE.Vector3) {
-    const count = 48;
+    const count = Math.max(12, Math.round(48 * this.particleScale));
     for (let i = 0; i < count; i++) {
       const p = this.particlePool.find((part) => !part.active);
       if (!p) break;
@@ -324,7 +351,7 @@ export class ParticleSystem {
 
   public addFlashFragExplosion(pos: THREE.Vector3) {
     // High-energy cyan/white/amber radial concussion burst
-    const count = 72;
+    const count = Math.max(18, Math.round(72 * this.particleScale));
     for (let i = 0; i < count; i++) {
       const p = this.particlePool.find((part) => !part.active);
       if (!p) break;
@@ -364,16 +391,19 @@ export class ParticleSystem {
     ring.position.copy(pos).setY(Math.max(0.15, pos.y + 0.1));
     this.scene.add(ring);
 
-    const flash = new THREE.PointLight(0x7dd3fc, 28, 22, 1.6);
-    flash.position.copy(pos).add(new THREE.Vector3(0, 0.6, 0));
-    this.scene.add(flash);
+    let flash: THREE.PointLight | null = null;
+    if (!this.disableLights) {
+      flash = new THREE.PointLight(0x7dd3fc, 28, 22, 1.6);
+      flash.position.copy(pos).add(new THREE.Vector3(0, 0.6, 0));
+      this.scene.add(flash);
+    }
 
     const start = performance.now();
     const tick = () => {
       const t = (performance.now() - start) / 420;
       if (t >= 1) {
         this.scene.remove(ring);
-        this.scene.remove(flash);
+        if (flash) this.scene.remove(flash);
         ringGeo.dispose();
         ringMat.dispose();
         return;
@@ -381,14 +411,14 @@ export class ParticleSystem {
       const scale = 1 + t * 15;
       ring.scale.setScalar(scale);
       ringMat.opacity = (1 - t) * 0.9;
-      flash.intensity = (1 - t) * 28;
+      if (flash) flash.intensity = (1 - t) * 28;
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   }
 
   public addBossEntranceMist(pos: THREE.Vector3) {
-    const count = 90;
+    const count = Math.max(24, Math.round(90 * this.particleScale));
     for (let i = 0; i < count; i++) {
       const p = this.particlePool.find((part) => !part.active);
       if (!p) break;

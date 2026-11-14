@@ -35,9 +35,16 @@ export function generateStandaloneHtml(): string {
     .radar-panel { position: absolute; top: 16px; left: 16px; display: flex; gap: 12px; align-items: flex-start; }
     .radar-card { background: rgba(12,16,23,0.9); border: 1px solid rgba(6,182,212,0.45); border-radius: 12px; padding: 6px; }
     .wave-card { background: rgba(12,16,23,0.9); border: 1px solid rgba(51,65,85,0.85); border-radius: 12px; padding: 10px 16px; min-width: 155px; }
-    #killfeed { position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    #top-right-stack { position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 360px; }
+    #fps-box { background: rgba(12,16,23,0.9); border: 1px solid rgba(51,65,85,0.85); border-radius: 8px; padding: 5px 11px; font-size: 12px; display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
+    #killfeed { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
     .kf-item { padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid #334155; background: rgba(12,16,23,0.9); }
     .kf-item.hs { background: rgba(127,29,29,0.9); border-color: rgba(239,68,68,0.65); color: #fecaca; }
+    .gfx-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; background: #090d14; padding: 4px; border-radius: 9px; border: 1px solid #1e293b; }
+    .gfx-btn { padding: 7px 6px; border-radius: 6px; border: none; background: transparent; color: #cbd5e1; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s; }
+    .gfx-btn:hover { background: #1e293b; color: #fff; }
+    .gfx-btn.active { background: #06b6d4; color: #020617; font-weight: 700; }
+    .gfx-btn.active.potato { background: #10b981; color: #020617; font-weight: 700; }
 
     #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 128px; height: 128px; pointer-events: none; display: flex; align-items: center; justify-content: center; }
     #hitmarker { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); display: none; pointer-events: none; }
@@ -180,7 +187,16 @@ export function generateStandaloneHtml(): string {
       </div>
     </div>
 
-    <div id="killfeed" class="font-mono"></div>
+    <div id="top-right-stack" class="font-mono">
+      <div id="fps-box">
+        <span id="fps-val" style="font-weight:700;color:#34d399;">60 FPS</span>
+        <span style="color:#475569;">·</span>
+        <span id="fps-status" style="color:#cbd5e1;font-weight:600;">OPTIMAL</span>
+        <span style="color:#475569;">·</span>
+        <span id="fps-preset" style="color:#67e8f9;font-weight:700;text-transform:uppercase;">HIGH</span>
+      </div>
+      <div id="killfeed"></div>
+    </div>
 
     <div id="crosshair">
       <svg id="crosshair-svg" width="128" height="128" viewBox="0 0 128 128" style="overflow:visible;"></svg>
@@ -294,9 +310,18 @@ export function generateStandaloneHtml(): string {
 
   <!-- SETTINGS SIDE DRAWER -->
   <div id="modal-settings" class="drawer-backdrop">
-    <div class="drawer-box" style="max-width:390px;">
+    <div class="drawer-box" style="max-width:400px;">
       <button class="close-btn" onclick="closeModals()">✕</button>
-      <h2 class="font-display" style="font-size:24px;margin-bottom:16px;">Settings</h2>
+      <div class="font-mono" style="font-size:11px;color:#22d3ee;text-transform:uppercase;">System Preferences</div>
+      <h2 class="font-display" style="font-size:24px;margin:2px 0 14px;">Settings</h2>
+      <div class="card" style="background:#0C1017;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:8px;">
+          <span>Graphics Preset</span>
+          <span id="set-gfx-tag" class="font-mono" style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;">ULTRA TACTICAL</span>
+        </div>
+        <div id="set-gfx-grid" class="gfx-grid"></div>
+        <div id="set-gfx-desc" style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.45;"></div>
+      </div>
       <div class="card" style="background:#0C1017;margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span>Mouse Sensitivity</span><span id="set-sens-val" class="font-mono" style="color:#22d3ee;">1.0x</span></div>
         <input type="range" id="set-sens" min="0.2" max="3.0" step="0.1" value="1.0" />
@@ -389,9 +414,16 @@ export function generateStandaloneHtml(): string {
 
   <!-- PAUSE MODAL -->
   <div id="modal-pause" class="modal-backdrop">
-    <div class="modal-box" style="max-width:380px;text-align:center;">
-      <h2 class="font-display" style="font-size:26px;margin-bottom:6px;">Paused</h2>
-      <p style="font-size:12px;color:#94a3b8;margin-bottom:18px;">Combat suspended</p>
+    <div class="modal-box" style="max-width:410px;text-align:center;">
+      <h2 class="font-display" style="font-size:26px;margin-bottom:4px;">Paused</h2>
+      <p style="font-size:12px;color:#94a3b8;margin-bottom:14px;">Combat suspended</p>
+      <div class="card" style="background:#0C1017;margin-bottom:10px;text-align:left;">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:8px;">
+          <span>Graphics Preset</span>
+          <span id="pause-gfx-tag" class="font-mono" style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;">ULTRA TACTICAL</span>
+        </div>
+        <div id="pause-gfx-grid" class="gfx-grid"></div>
+      </div>
       <div class="card" style="background:#0C1017;margin-bottom:14px;text-align:left;">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Mouse Sensitivity</span><span id="pause-sens-val" class="font-mono" style="color:#22d3ee;">1.0x</span></div>
         <input type="range" id="pause-sens" min="0.2" max="3.0" step="0.1" value="1.0" />
@@ -472,6 +504,7 @@ export function generateStandaloneHtml(): string {
     // 1. PROFILE & SETTINGS PERSISTENCE (localStorage)
     // =========================================================================
     const STORAGE_KEY = 'GIS_SHOOTER_TACTICAL_STANDALONE';
+    const GFX_STORAGE_KEY = 'GIS_SHOOTER_GRAPHICS_PRESET';
     const DEFAULT_CH = {
       style: 'classic', color: '#22C55E', length: 9, thickness: 2,
       gap: 5, dotSize: 3, opacity: 0.95, outline: true, dynamic: true
@@ -480,22 +513,30 @@ export function generateStandaloneHtml(): string {
       callsign: 'SPECTRE-01', level: 1, xp: 0, totalKills: 0, totalHeadshots: 0,
       totalShots: 0, totalHits: 0, highScore: 0, highestWave: 1,
       mouseSensitivity: 1.0, baseFov: 75, masterVolume: 0.7, accentColor: '#06b6d4', preferredSlot: 0,
-      crosshair: Object.assign({}, DEFAULT_CH), achievements: [], bossDefeatedCount: 0
+      crosshair: Object.assign({}, DEFAULT_CH), graphicsPreset: 'high', achievements: [], bossDefeatedCount: 0
     };
     let profile = Object.assign({}, DEFAULT_PROF, { crosshair: Object.assign({}, DEFAULT_CH), achievements: [] });
     try {
+      const savedGfx = localStorage.getItem(GFX_STORAGE_KEY);
+      if (savedGfx === 'high' || savedGfx === 'medium' || savedGfx === 'potato') profile.graphicsPreset = savedGfx;
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         profile = Object.assign({}, DEFAULT_PROF, parsed);
         profile.crosshair = Object.assign({}, DEFAULT_CH, parsed.crosshair || {});
+        if (profile.graphicsPreset !== 'high' && profile.graphicsPreset !== 'medium' && profile.graphicsPreset !== 'potato') {
+          profile.graphicsPreset = (savedGfx === 'medium' || savedGfx === 'potato') ? savedGfx : 'high';
+        }
         if (!Array.isArray(profile.achievements)) profile.achievements = [];
         if (typeof profile.bossDefeatedCount !== 'number') profile.bossDefeatedCount = 0;
       }
     } catch(e) {}
 
     function saveProfile() {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(profile)); } catch(e) {}
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+        localStorage.setItem(GFX_STORAGE_KEY, profile.graphicsPreset || 'high');
+      } catch(e) {}
       refreshMenuUI();
     }
     function getRankTitle(lvl) {
@@ -812,13 +853,14 @@ export function generateStandaloneHtml(): string {
     // 3. THREE.JS SCENE, RENDERER & PROCEDURAL TEXTURES + BUMP MAPS
     // =========================================================================
     const wrap = document.getElementById('canvas-wrap');
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    let currentAntialias = profile.graphicsPreset !== 'potato';
+    let renderer = new THREE.WebGLRenderer({ antialias: currentAntialias, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(profile.graphicsPreset === 'potato' ? 0.75 : profile.graphicsPreset === 'medium' ? 1.0 : Math.min(window.devicePixelRatio, 2));
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = profile.graphicsPreset !== 'potato';
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     wrap.appendChild(renderer.domElement);
 
@@ -829,8 +871,12 @@ export function generateStandaloneHtml(): string {
     const camera = new THREE.PerspectiveCamera(profile.baseFov, window.innerWidth / window.innerHeight, 0.08, 500);
     scene.add(camera);
 
-    // Lighting
-    scene.add(new THREE.HemisphereLight(0x38bdf8, 0x0f172a, 0.72));
+    // Lighting (+ Potato Mode Ambient Fallback)
+    const arenaAmbient = new THREE.AmbientLight(0xdbeafe, 1.35);
+    arenaAmbient.visible = false;
+    scene.add(arenaAmbient);
+    const arenaHemi = new THREE.HemisphereLight(0x38bdf8, 0x0f172a, 0.72);
+    scene.add(arenaHemi);
     const sun = new THREE.DirectionalLight(0xfef3c7, 1.8);
     sun.position.set(32, 48, 22);
     sun.castShadow = true;
@@ -842,6 +888,7 @@ export function generateStandaloneHtml(): string {
     const rim = new THREE.DirectionalLight(0x06b6d4, 0.55);
     rim.position.set(-35, 24, -30);
     scene.add(rim);
+    const arenaPointLights = [];
 
     // Procedural Canvas Textures
     function makeFloorMaps() {
@@ -988,6 +1035,7 @@ export function generateStandaloneHtml(): string {
       const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,3.0,14), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 1.6 }));
       rod.position.y = 1.8; g.add(rod); energyCores.push(rod);
       const pl = new THREE.PointLight(col, 18, 22, 1.4); pl.position.y = 2.5; g.add(pl);
+      arenaPointLights.push({ light: pl, base: 18 });
       scene.add(g);
     });
 
@@ -1231,6 +1279,7 @@ export function generateStandaloneHtml(): string {
       d.visible = true;
     }
     function ejectShell(pos, right, up, fwd, isSg) {
+      if (profile.graphicsPreset === 'potato') return;
       const m = new THREE.Mesh(shellGeo, isSg ? hullMat : brassMat);
       m.position.copy(pos); scene.add(m);
       const vel = right.clone().multiplyScalar(2.5 + Math.random()).addScaledVector(up, 1.8).addScaledVector(fwd, -0.4);
@@ -1285,7 +1334,8 @@ export function generateStandaloneHtml(): string {
     });
     function setBossAtmo(on) {
       bossAlarmGroup.visible = on;
-      bossAlarmLights.forEach(l => l.intensity = on ? 22 : 0);
+      const pot = profile.graphicsPreset === 'potato';
+      bossAlarmLights.forEach(l => l.intensity = (on && !pot) ? 22 : 0);
     }
 
     function makeLabCoatTex() {
@@ -1596,6 +1646,7 @@ export function generateStandaloneHtml(): string {
 
       if (wNum === 10) {
         boss = createBoss(0, -24);
+        applyMaterialQuality(boss.group, profile.graphicsPreset);
         setBossAtmo(true); AudioSys.bossAlarm(); AudioSys.bossMusicStart();
         state.bannerTitle = 'WARNING · THE SPECIALIST ANESTESI';
         state.bannerSub = 'WAVE 10 BOSS ARRIVAL · TARGET DORSAL BIO-TANK OR HEAD';
@@ -1608,7 +1659,9 @@ export function generateStandaloneHtml(): string {
       const count = Math.min(8, 2 + Math.ceil((wNum - 1) * 0.75));
       for (let i = 0; i < count; i++) {
         const sp = SPAWNS[i % SPAWNS.length];
-        enemies.push(createBot('UNIT-'+(i+1), sp[0] + (Math.random()-0.5)*3, sp[2] + (Math.random()-0.5)*3, wNum));
+        const bt = createBot('UNIT-'+(i+1), sp[0] + (Math.random()-0.5)*3, sp[2] + (Math.random()-0.5)*3, wNum);
+        applyMaterialQuality(bt.group, profile.graphicsPreset);
+        enemies.push(bt);
       }
       updateHUD();
     }
@@ -1665,7 +1718,7 @@ export function generateStandaloneHtml(): string {
         flashCone.position.copy(mAnchor.position);
         flashLight.position.copy(mAnchor.position);
         flashCone.material.opacity = supp ? 0.45 : 0.95;
-        flashLight.intensity = supp ? 5 : 18;
+        flashLight.intensity = profile.graphicsPreset === 'potato' ? 0 : (supp ? 5 : 18);
         setTimeout(() => { flashCone.material.opacity = 0; flashLight.intensity = 0; }, 50);
       } else muzzlePos.copy(camera.position);
 
@@ -1761,6 +1814,7 @@ export function generateStandaloneHtml(): string {
       isLocked = document.pointerLockElement === document.body;
       if (!state.inMenu && !state.dead && !state.invOpen) {
         state.paused = !isLocked;
+        if (state.paused) syncGraphicsUI();
         document.getElementById('modal-pause').style.display = state.paused ? 'flex' : 'none';
       }
     });
@@ -1848,8 +1902,9 @@ export function generateStandaloneHtml(): string {
     lobbyScene.fog = new THREE.FogExp2(0x070b12, 0.014);
     const lobbyCam = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 260);
 
-    // Three-Point Studio Lighting
-    lobbyScene.add(new THREE.HemisphereLight(0x38bdf8, 0x0b1019, 0.78));
+    // Three-Point Studio Lighting (+ Potato Ambient Fallback)
+    const lobbyAmbient = new THREE.AmbientLight(0xdbeafe, 1.25); lobbyAmbient.visible = false; lobbyScene.add(lobbyAmbient);
+    const lobbyHemi = new THREE.HemisphereLight(0x38bdf8, 0x0b1019, 0.78); lobbyScene.add(lobbyHemi);
     const lobbyKey = new THREE.DirectionalLight(0xfde68a, 2.0);
     lobbyKey.position.set(4.5, 8.5, 5.5); lobbyKey.castShadow = true;
     lobbyKey.shadow.mapSize.set(2048, 2048);
@@ -2008,7 +2063,8 @@ export function generateStandaloneHtml(): string {
     const dGeo = new THREE.BufferGeometry(), dPos = new Float32Array(180 * 3);
     for (let i = 0; i < 180; i++) { dPos[i*3] = (Math.random()-0.5)*16; dPos[i*3+1] = 0.3 + Math.random()*6; dPos[i*3+2] = (Math.random()-0.5)*14; }
     dGeo.setAttribute('position', new THREE.BufferAttribute(dPos, 3));
-    lobbyScene.add(new THREE.Points(dGeo, new THREE.PointsMaterial({ color: 0x7dd3fc, size: 0.06, transparent: true, opacity: 0.5 })));
+    const lobbyDust = new THREE.Points(dGeo, new THREE.PointsMaterial({ color: 0x7dd3fc, size: 0.06, transparent: true, opacity: 0.5 }));
+    lobbyScene.add(lobbyDust);
 
     // Lobby Drag-Orbit & Camera Focus Choreography
     const LOBBY_PRESETS = {
@@ -2021,11 +2077,20 @@ export function generateStandaloneHtml(): string {
     let uAzOff = 0, uElOff = 0, uDistOff = 0, lobbyDrag = false, lpx = 0, lpy = 0, lobbyTime = 0;
     function setLobbyMode(m) { if (lobbyMode !== m) { lobbyMode = m; uAzOff = uElOff = uDistOff = 0; } }
 
-    renderer.domElement.addEventListener('pointerdown', e => {
+    function onCanvasPointerDown(e) {
       if (!state.inMenu) return;
       AudioSys.startLobbyAmbient();
       if (e.button === 0) { lobbyDrag = true; lpx = e.clientX; lpy = e.clientY; }
-    });
+    }
+    function onCanvasWheel(e) {
+      if (!state.inMenu) return;
+      uDistOff = Math.max(-1.2, Math.min(2.6, uDistOff + e.deltaY * 0.0025));
+    }
+    function bindCanvasListeners(cvs) {
+      cvs.addEventListener('pointerdown', onCanvasPointerDown);
+      cvs.addEventListener('wheel', onCanvasWheel, { passive: true });
+    }
+    bindCanvasListeners(renderer.domElement);
     window.addEventListener('pointermove', e => {
       if (!state.inMenu || !lobbyDrag) return;
       uAzOff -= (e.clientX - lpx) * 0.0075;
@@ -2033,10 +2098,131 @@ export function generateStandaloneHtml(): string {
       lpx = e.clientX; lpy = e.clientY;
     });
     window.addEventListener('pointerup', () => { lobbyDrag = false; });
-    renderer.domElement.addEventListener('wheel', e => {
-      if (!state.inMenu) return;
-      uDistOff = Math.max(-1.2, Math.min(2.6, uDistOff + e.deltaY * 0.0025));
-    }, { passive: true });
+
+    // Graphics Preset & Potato Mode Engine
+    const origMatMap = new WeakMap();
+    const lambertCache = new WeakMap();
+    function toLambertMat(mat) {
+      if (!mat || !mat.isMeshStandardMaterial) return mat;
+      const c = lambertCache.get(mat);
+      if (c) return c;
+      const lm = new THREE.MeshLambertMaterial({
+        color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
+        map: mat.map || null,
+        emissive: mat.emissive ? mat.emissive.clone() : new THREE.Color(0x000000),
+        emissiveMap: mat.emissiveMap || null,
+        emissiveIntensity: mat.emissiveIntensity !== undefined ? mat.emissiveIntensity : 1,
+        transparent: !!mat.transparent,
+        opacity: mat.opacity !== undefined ? mat.opacity : 1,
+        side: mat.side !== undefined ? mat.side : THREE.FrontSide,
+        wireframe: !!mat.wireframe,
+        depthWrite: mat.depthWrite !== undefined ? mat.depthWrite : true,
+        depthTest: mat.depthTest !== undefined ? mat.depthTest : true
+      });
+      lambertCache.set(mat, lm);
+      return lm;
+    }
+    function applyMaterialQuality(root, preset) {
+      const simple = preset === 'potato';
+      root.traverse(obj => {
+        if (!obj.isMesh || !obj.material) return;
+        if (simple) {
+          if (!origMatMap.has(obj)) origMatMap.set(obj, obj.material);
+          const orig = origMatMap.get(obj);
+          obj.material = Array.isArray(orig) ? orig.map(toLambertMat) : toLambertMat(orig);
+        } else {
+          const orig = origMatMap.get(obj);
+          if (orig) obj.material = orig;
+        }
+      });
+    }
+    function recreateStandaloneRenderer(aa) {
+      if (aa === currentAntialias) return;
+      currentAntialias = aa;
+      const oldCvs = renderer.domElement;
+      oldCvs.removeEventListener('pointerdown', onCanvasPointerDown);
+      oldCvs.removeEventListener('wheel', onCanvasWheel);
+      renderer.dispose();
+      if (oldCvs.parentElement === wrap) wrap.removeChild(oldCvs);
+      const nr = new THREE.WebGLRenderer({ antialias: aa, powerPreference: 'high-performance' });
+      nr.setSize(window.innerWidth, window.innerHeight);
+      nr.outputEncoding = THREE.sRGBEncoding;
+      nr.toneMapping = THREE.ACESFilmicToneMapping;
+      nr.toneMappingExposure = 1.15;
+      nr.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer = nr;
+      wrap.appendChild(renderer.domElement);
+      bindCanvasListeners(renderer.domElement);
+    }
+    const GFX_META = [
+      { id: 'high', label: 'High', tag: 'ULTRA TACTICAL', desc: 'Full Retina DPI, soft shadows, PBR bump/metalness, and full VFX.' },
+      { id: 'medium', label: 'Medium', tag: 'BALANCED', desc: '1.0x native resolution, balanced particles, and full 3-point lighting.' },
+      { id: 'potato', label: 'Potato Mode', tag: 'MAX FPS', desc: '0.75x scale, shadows & AA off, Lambert materials, no shells/dust, near fog.' }
+    ];
+    function syncGraphicsUI() {
+      const cur = profile.graphicsPreset || 'high';
+      const meta = GFX_META.find(m => m.id === cur) || GFX_META[0];
+      const tagCol = cur === 'potato' ? '#34d399' : cur === 'medium' ? '#fbbf24' : '#22d3ee';
+      const stTag = document.getElementById('set-gfx-tag');
+      if (stTag) { stTag.innerText = meta.tag; stTag.style.color = tagCol; }
+      const stDesc = document.getElementById('set-gfx-desc');
+      if (stDesc) stDesc.innerText = meta.desc;
+      const pTag = document.getElementById('pause-gfx-tag');
+      if (pTag) { pTag.innerText = meta.tag; pTag.style.color = tagCol; }
+      const btnsHtml = GFX_META.map(m =>
+        '<button type="button" onclick="setGfxPreset(\\''+m.id+'\\')" class="gfx-btn '+(cur===m.id ? ('active'+(m.id==='potato'?' potato':'')) : '')+'">'+m.label+'</button>'
+      ).join('');
+      const sg = document.getElementById('set-gfx-grid'); if (sg) sg.innerHTML = btnsHtml;
+      const pg = document.getElementById('pause-gfx-grid'); if (pg) pg.innerHTML = btnsHtml;
+      const fp = document.getElementById('fps-preset');
+      if (fp) { fp.innerText = cur === 'potato' ? 'POTATO' : cur.toUpperCase(); fp.style.color = tagCol; }
+    }
+    function applyGraphicsPreset(preset) {
+      const p = (preset === 'medium' || preset === 'potato') ? preset : 'high';
+      const wantAA = p !== 'potato';
+      if (wantAA !== currentAntialias) recreateStandaloneRenderer(wantAA);
+      if (p === 'potato') {
+        renderer.setPixelRatio(0.75);
+        renderer.shadowMap.enabled = false;
+        sun.castShadow = false; sun.intensity = 1.25;
+        arenaAmbient.visible = true; arenaHemi.visible = false; rim.visible = false;
+        arenaPointLights.forEach(pl => pl.light.intensity = 0);
+        flashLight.intensity = 0;
+        bossAlarmLights.forEach(l => l.intensity = 0);
+        scene.fog = new THREE.Fog(0x0C1017, 14, 52);
+        camera.far = 95;
+        lobbyDust.visible = false;
+        lobbyAmbient.visible = true; lobbyHemi.visible = false; lobbyRim.visible = false;
+        lobbyKey.castShadow = false; lobbyKey.intensity = 1.35; lobbyPodLight.intensity = 0;
+        lobbyScene.fog = new THREE.Fog(0x070b12, 8, 28);
+        lobbyCam.far = 90;
+        while (shells.length) { const sh = shells.pop(); scene.remove(sh.mesh); }
+      } else {
+        renderer.setPixelRatio(p === 'medium' ? 1.0 : Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        sun.castShadow = true; sun.intensity = 1.8;
+        arenaAmbient.visible = false; arenaHemi.visible = true; rim.visible = true;
+        arenaPointLights.forEach(pl => pl.light.intensity = pl.base);
+        scene.fog = new THREE.FogExp2(0x0C1017, p === 'medium' ? 0.015 : 0.014);
+        camera.far = p === 'medium' ? 300 : 500;
+        lobbyDust.visible = true;
+        lobbyAmbient.visible = false; lobbyHemi.visible = true; lobbyRim.visible = true;
+        lobbyKey.castShadow = true; lobbyKey.intensity = 2.0; lobbyPodLight.intensity = 5.5;
+        lobbyScene.fog = new THREE.FogExp2(0x070b12, 0.014);
+        lobbyCam.far = p === 'medium' ? 180 : 260;
+      }
+      camera.updateProjectionMatrix();
+      lobbyCam.updateProjectionMatrix();
+      applyMaterialQuality(scene, p);
+      applyMaterialQuality(lobbyScene, p);
+      syncGraphicsUI();
+    }
+    window.setGfxPreset = p => {
+      profile.graphicsPreset = p;
+      applyGraphicsPreset(p);
+      saveProfile();
+    };
+    applyGraphicsPreset(profile.graphicsPreset);
 
     // =========================================================================
     // 10. UI BINDINGS (MENU, SIDE DRAWERS, INVENTORY, RADAR)
@@ -2214,6 +2400,7 @@ export function generateStandaloneHtml(): string {
     document.getElementById('btn-settings').onclick = () => {
       AudioSys.startLobbyAmbient(); setLobbyMode('settings');
       document.getElementById('main-menu').style.display = 'none';
+      syncGraphicsUI();
       document.getElementById('set-sens').value = profile.mouseSensitivity;
       document.getElementById('set-sens-val').innerText = profile.mouseSensitivity.toFixed(1) + 'x';
       document.getElementById('set-fov').value = profile.baseFov;
@@ -2500,8 +2687,23 @@ export function generateStandaloneHtml(): string {
       }
     }
 
+    let fpsFrames = 0, fpsLast = performance.now();
     function animate() {
       requestAnimationFrame(animate);
+      fpsFrames++;
+      const nowMs = performance.now();
+      const fpsElap = nowMs - fpsLast;
+      if (fpsElap >= 250) {
+        const fpsVal = Math.max(1, Math.round((fpsFrames * 1000) / fpsElap));
+        fpsFrames = 0; fpsLast = nowMs;
+        const fvEl = document.getElementById('fps-val'), fsEl = document.getElementById('fps-status');
+        if (fvEl && fsEl) {
+          fvEl.innerText = fpsVal + ' FPS';
+          if (fpsVal >= 50) { fvEl.style.color = '#34d399'; fsEl.innerText = 'OPTIMAL'; }
+          else if (fpsVal >= 30) { fvEl.style.color = '#fbbf24'; fsEl.innerText = 'STABLE'; }
+          else { fvEl.style.color = '#fb7185'; fsEl.innerText = 'LOW'; }
+        }
+      }
       const dt = Math.min(clock.getDelta(), 0.1);
 
       if (state.inMenu) {
@@ -2534,8 +2736,12 @@ export function generateStandaloneHtml(): string {
 
       energyCores.forEach(c => c.rotation.y += dt * 0.9);
       if (bossAlarmGroup.visible) {
-        const bp = 12 + Math.sin(performance.now()*0.012)*10;
-        bossAlarmLights.forEach((l,i) => l.intensity = Math.max(4, bp*(i===0?1:0.85)));
+        if (profile.graphicsPreset === 'potato') {
+          bossAlarmLights.forEach(l => l.intensity = 0);
+        } else {
+          const bp = 12 + Math.sin(nowMs*0.012)*10;
+          bossAlarmLights.forEach((l,i) => l.intensity = Math.max(4, bp*(i===0?1:0.85)));
+        }
       }
       if (!state.paused && !state.dead && !state.invOpen) {
         state.survT += dt;
