@@ -20,6 +20,8 @@ import { InventoryModal } from './components/InventoryModal';
 import { PauseModal } from './components/PauseModal';
 import { GameOverModal } from './components/GameOverModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
+import { PatchNotesModal } from './components/PatchNotesModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
 import { soundSystem } from './audio/SoundSystem';
 
 export default function App() {
@@ -29,9 +31,11 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [profile, setProfile] = useState<PlayerProfileData>(DEFAULT_PROFILE);
   const [activeMenuModal, setActiveMenuModal] = useState<
-    'none' | 'armory' | 'profile' | 'settings' | 'crosshair' | 'leaderboard'
+    'none' | 'armory' | 'profile' | 'settings' | 'crosshair' | 'leaderboard' | 'patchnotes'
   >('none');
   const [showPostGameLeaderboard, setShowPostGameLeaderboard] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
 
   useEffect(() => {
     if (!canvasMountRef.current) return;
@@ -48,7 +52,29 @@ export default function App() {
     setGameState(engine.state);
     setProfile(engine.profile);
 
+    const win = window as unknown as {
+      nextWave?: (wave?: number) => void;
+      summonBoss?: () => void;
+      killAllHostiles?: () => number;
+    };
+    win.nextWave = (wave?: number) => {
+      if (typeof wave === 'number' && Number.isFinite(wave) && wave >= 1) {
+        if (engine.state.isInMenu) {
+          engine.startGame(Math.floor(wave), false);
+        } else if (!engine.state.isDead) {
+          engine.startNewWave(Math.floor(wave));
+        }
+      } else {
+        engine.adminSkipWave();
+      }
+    };
+    win.summonBoss = () => engine.adminSummonBossWave();
+    win.killAllHostiles = () => engine.adminKillAllHostiles();
+
     return () => {
+      delete win.nextWave;
+      delete win.summonBoss;
+      delete win.killAllHostiles;
       engine.dispose();
       engineRef.current = null;
     };
@@ -63,9 +89,51 @@ export default function App() {
       settings: 'settings',
       crosshair: 'settings',
       leaderboard: 'overview',
+      patchnotes: 'overview',
     };
     engineRef.current?.setLobbyFocus(focusMap[activeMenuModal]);
   }, [activeMenuModal]);
+
+  // Global Secret Admin Shortcuts: Shift+F12 (Menu/Pause/In-Game) & "gisadmin" keyword (Menu/Pause)
+  useEffect(() => {
+    let keywordBuffer = '';
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTextInput =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
+
+      if (e.shiftKey && e.key === 'F12') {
+        e.preventDefault();
+        const st = engineRef.current?.state;
+        if (st && !st.isInMenu && !st.isPaused && !st.isDead) {
+          engineRef.current?.pauseForAdmin();
+        }
+        setIsAdminOpen((prev) => !prev);
+        return;
+      }
+
+      if (isTextInput) return;
+
+      const st = engineRef.current?.state;
+      const onMenuOrPause = !st || st.isInMenu || st.isPaused;
+      if (onMenuOrPause && e.key.length === 1 && /^[a-zA-Z]$/.test(e.key)) {
+        keywordBuffer = (keywordBuffer + e.key.toLowerCase()).slice(-8);
+        if (keywordBuffer === 'gisadmin') {
+          keywordBuffer = '';
+          setIsAdminOpen(true);
+        }
+      } else if (e.key.length === 1) {
+        keywordBuffer = '';
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
 
   const handleStartGame = () => {
     soundSystem.resume();
@@ -112,6 +180,8 @@ export default function App() {
           onOpenSettings={() => setActiveMenuModal('settings')}
           onOpenCrosshair={() => setActiveMenuModal('crosshair')}
           onOpenLeaderboard={() => setActiveMenuModal('leaderboard')}
+          onOpenPatchNotes={() => setActiveMenuModal('patchnotes')}
+          onOpenAdmin={() => setIsAdminOpen(true)}
         />
       )}
 
@@ -119,8 +189,12 @@ export default function App() {
       {isInMenu && activeMenuModal === 'armory' && (
         <ArmoryModal
           preferredSlot={profile.preferredSlot}
-          onPreviewSlot={(slotIndex) => engineRef.current?.previewLobbyWeapon(slotIndex)}
+          slot4Choice={profile.slot4Choice || 'desert_python'}
+          onPreviewSlot={(slotIndex, overrideSlot4) =>
+            engineRef.current?.previewLobbyWeapon(slotIndex, overrideSlot4)
+          }
           onSelectSlot={(slotIndex) => handleUpdateProfile({ preferredSlot: slotIndex })}
+          onChangeSlot4={(choice) => handleUpdateProfile({ slot4Choice: choice })}
           onClose={() => setActiveMenuModal('none')}
         />
       )}
@@ -158,6 +232,10 @@ export default function App() {
         />
       )}
 
+      {isInMenu && activeMenuModal === 'patchnotes' && (
+        <PatchNotesModal onClose={() => setActiveMenuModal('none')} />
+      )}
+
       {/* In-Game Tactical HUD */}
       {!isInMenu && gameState && <HUD state={gameState} profile={profile} />}
 
@@ -183,6 +261,8 @@ export default function App() {
             onRestart={handleRestartGame}
             onReturnToMenu={handleReturnToMenu}
             onUpdateProfile={handleUpdateProfile}
+            onOpenAdmin={() => setIsAdminOpen(true)}
+            pointerLockNotice={gameState.pointerLockNotice}
           />
         )}
 
@@ -204,6 +284,23 @@ export default function App() {
           activeCallsign={profile.callsign}
           profile={profile}
           onClose={() => setShowPostGameLeaderboard(false)}
+        />
+      )}
+
+      {/* Secret Developer Console / PIN Verification Gate */}
+      {isAdminOpen && (
+        <AdminPanelModal
+          isAuthenticated={isAdminAuthenticated}
+          onAuthenticate={() => setIsAdminAuthenticated(true)}
+          onLockConsole={() => setIsAdminAuthenticated(false)}
+          onClose={() => setIsAdminOpen(false)}
+          gameState={gameState}
+          profile={profile}
+          onSkipWave={() => engineRef.current?.adminSkipWave()}
+          onSummonBoss={() => engineRef.current?.adminSummonBossWave()}
+          onKillAllHostiles={() => engineRef.current?.adminKillAllHostiles() ?? 0}
+          onUpdateCheats={(updates) => engineRef.current?.setAdminCheats(updates)}
+          onGrantMaxXp={() => engineRef.current?.adminGrantMaxXpAndUnlockAll()}
         />
       )}
     </div>

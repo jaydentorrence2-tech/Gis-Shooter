@@ -33,7 +33,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
 
         <div className="mb-5">
           <div className="text-xs font-mono-tech text-cyan-400 uppercase tracking-wider">
-            Field Loadout · Scroll Wheel or 1–7 to Switch · Press Tab or I to return
+            Fixed 4-Slot Loadout · Press 1–4 or Scroll Wheel to Switch · Tab or I to Return
           </div>
           <h2 className="text-2xl font-display font-bold text-white mt-0.5">
             Tactical Inventory
@@ -41,7 +41,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5 max-h-[65vh] overflow-y-auto pr-1">
-          {state.weapons.map((wep, idx) => {
+          {state.weapons.slice(0, 4).map((wep, idx) => {
             const isEquipped = state.activeWeaponIndex === idx;
             return (
               <div

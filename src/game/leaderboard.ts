@@ -27,6 +27,152 @@ export interface LeaderboardEntry {
 }
 
 export const LEADERBOARD_STORAGE_KEY = 'GIS_SHOOTER_LEADERBOARD_V1';
+export const BANNED_CALLSIGNS_STORAGE_KEY = 'GIS_SHOOTER_BANNED_CALLSIGNS_V1';
+export const DELETED_SCORES_STORAGE_KEY = 'GIS_SHOOTER_DELETED_SCORES_V1';
+
+export function loadBannedCallsigns(): string[] {
+  try {
+    const raw = localStorage.getItem(BANNED_CALLSIGNS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((s): s is string => typeof s === 'string').map((s) => s.trim().toUpperCase())
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveBannedCallsigns(list: string[]) {
+  try {
+    localStorage.setItem(BANNED_CALLSIGNS_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function loadDeletedScoreIds(): string[] {
+  try {
+    const raw = localStorage.getItem(DELETED_SCORES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDeletedScoreIds(ids: string[]) {
+  try {
+    localStorage.setItem(DELETED_SCORES_STORAGE_KEY, JSON.stringify(ids));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function banOrRemoveLeaderboardEntry(id: string, callsign: string, banCallsign = true) {
+  const deleted = new Set(loadDeletedScoreIds());
+  deleted.add(id);
+  saveDeletedScoreIds(Array.from(deleted));
+
+  // Also strip matching local entries if deleted directly
+  const local = loadLocalScores().filter((e) => e.id !== id);
+  try {
+    localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(local));
+  } catch {
+    // ignore
+  }
+
+  if (banCallsign && callsign.trim()) {
+    const banned = new Set(loadBannedCallsigns());
+    banned.add(callsign.trim().toUpperCase());
+    saveBannedCallsigns(Array.from(banned));
+  }
+}
+
+export function unbanCallsign(callsign: string) {
+  const norm = callsign.trim().toUpperCase();
+  const next = loadBannedCallsigns().filter((c) => c !== norm);
+  saveBannedCallsigns(next);
+}
+
+export function clearAllModerationFilters() {
+  saveBannedCallsigns([]);
+  saveDeletedScoreIds([]);
+}
+
+export function addOrUpdateCustomScore(params: {
+  callsign: string;
+  score: number;
+  wave: number;
+  kills: number;
+  accuracy: number;
+  isPlayer?: boolean;
+}): LeaderboardEntry {
+  const cleanCallsign = params.callsign.trim().toUpperCase() || 'OPERATIVE';
+  const cleanScore = Math.max(0, Math.round(params.score));
+  const cleanWave = Math.max(1, Math.min(99, Math.round(params.wave)));
+  const cleanKills = Math.max(0, Math.round(params.kills));
+  const cleanAcc = Math.max(0, Math.min(100, Math.round(params.accuracy)));
+
+  // Unban callsign automatically if admin explicitly adds custom score for them
+  unbanCallsign(cleanCallsign);
+
+  const existing = loadLocalScores();
+  const matchIdx = existing.findIndex(
+    (e) => e.callsign.trim().toUpperCase() === cleanCallsign
+  );
+  const weekKey = getCurrentWeekKey();
+
+  let savedEntry: LeaderboardEntry;
+  if (matchIdx >= 0) {
+    savedEntry = {
+      ...existing[matchIdx],
+      callsign: cleanCallsign,
+      score: cleanScore,
+      wave: cleanWave,
+      kills: cleanKills,
+      accuracy: cleanAcc,
+      headshots: Math.min(cleanKills, Math.round(cleanKills * 0.45)),
+      timestamp: Date.now(),
+      weekKey,
+    };
+    existing[matchIdx] = savedEntry;
+  } else {
+    savedEntry = {
+      id: `adm_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      callsign: cleanCallsign,
+      countryCode: 'ID',
+      flag: '🇮🇩',
+      kills: cleanKills,
+      headshots: Math.min(cleanKills, Math.round(cleanKills * 0.45)),
+      accuracy: cleanAcc,
+      survivalSec: Math.max(60, cleanWave * 55 + cleanKills * 4),
+      wave: cleanWave,
+      score: cleanScore,
+      xpEarned: Math.round(cleanScore * 0.4),
+      timestamp: Date.now(),
+      isPlayer: params.isPlayer ?? true,
+      weekKey,
+      level: Math.min(25, Math.max(1, Math.round(1 + cleanWave * 1.2))),
+      avatarColor: '#f59e0b',
+      favoriteWeapon: 'AR-X7 Tactical',
+    };
+    existing.unshift(savedEntry);
+  }
+
+  const next = existing
+    .sort((a, b) => b.score - a.score || b.kills - a.kills || b.accuracy - a.accuracy)
+    .slice(0, 60);
+
+  try {
+    localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+
+  return savedEntry;
+}
 
 export function getCurrentWeekKey(date = new Date()): string {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -256,6 +402,8 @@ export function getMergedLeaderboard(
   const local = loadLocalScores();
   const weekKey = getCurrentWeekKey();
   const normalizedActive = activeCallsign.trim().toUpperCase();
+  const bannedSet = new Set(loadBannedCallsigns());
+  const deletedSet = new Set(loadDeletedScoreIds());
 
   let pool: LeaderboardEntry[] = [];
   if (tab === 'personal') {
@@ -266,6 +414,12 @@ export function getMergedLeaderboard(
   } else {
     pool = [...local, ...GLOBAL_BOTS];
   }
+
+  pool = pool.filter(
+    (entry) =>
+      !deletedSet.has(entry.id) &&
+      !bannedSet.has(entry.callsign.trim().toUpperCase())
+  );
 
   pool.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;

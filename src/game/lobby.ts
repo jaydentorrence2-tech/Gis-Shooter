@@ -128,6 +128,7 @@ export class TacticalLobby {
   private headPivot: THREE.Group;
   private weaponMount: THREE.Group;
   private weaponModels: THREE.Group[] = [];
+  private weaponModelsById: Record<string, THREE.Group> = {};
   private visorMat: THREE.MeshStandardMaterial;
   private accentRingMat: THREE.MeshStandardMaterial;
   private podiumLight: THREE.PointLight;
@@ -724,8 +725,17 @@ export class TacticalLobby {
     const med = createNanoMedkitViewModel();
     med.rotation.x = Math.PI / 2;
     med.scale.setScalar(0.95);
-    this.weaponModels = [ar, v9, sg, sr, py, fg, med];
-    this.weaponModels.forEach((vm) => {
+    this.weaponModels = [ar, sg, sr, py];
+    this.weaponModelsById = {
+      ar_x7: ar,
+      vector_v9: v9,
+      sg_12: sg,
+      sr_50: sr,
+      desert_python: py,
+      flash_frag: fg,
+      nano_medkit: med,
+    };
+    Object.values(this.weaponModelsById).forEach((vm) => {
       vm.visible = false;
       setViewmodelLaserVisible(vm, false);
       vm.traverse((obj) => {
@@ -1032,9 +1042,19 @@ export class TacticalLobby {
   }
 
   public setWeapon(slotIndex: number) {
-    this.weaponModels.forEach((vm, idx) => {
-      vm.visible = idx === slotIndex;
+    Object.values(this.weaponModelsById).forEach((vm) => {
+      vm.visible = false;
     });
+    const target = this.weaponModels[slotIndex] || this.weaponModels[0];
+    if (target) target.visible = true;
+  }
+
+  public setWeaponById(weaponId: string) {
+    Object.values(this.weaponModelsById).forEach((vm) => {
+      vm.visible = false;
+    });
+    const target = this.weaponModelsById[weaponId] || this.weaponModels[0];
+    if (target) target.visible = true;
   }
 
   public setAccentColor(hex: string) {

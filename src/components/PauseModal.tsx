@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { GraphicsPreset, PlayerProfileData } from '../game/GameEngine';
-import { Play, Volume2, VolumeX, RotateCcw, Home, Target } from 'lucide-react';
+import { Play, Volume2, VolumeX, RotateCcw, Home, Target, Terminal } from 'lucide-react';
 import { soundSystem } from '../audio/SoundSystem';
 import { CrosshairEditorModal } from './CrosshairEditorModal';
 
@@ -15,6 +15,8 @@ interface PauseModalProps {
   onRestart: () => void;
   onReturnToMenu: () => void;
   onUpdateProfile: (updates: Partial<PlayerProfileData>) => void;
+  onOpenAdmin?: () => void;
+  pointerLockNotice?: string | null;
 }
 
 const PRESET_TABS: { id: GraphicsPreset; label: string; tag: string }[] = [
@@ -29,6 +31,8 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   onRestart,
   onReturnToMenu,
   onUpdateProfile,
+  onOpenAdmin,
+  pointerLockNotice,
 }) => {
   const [isMuted, setIsMuted] = useState(soundSystem.getMuted());
   const [isCrosshairOpen, setIsCrosshairOpen] = useState(false);
@@ -164,6 +168,11 @@ export const PauseModal: React.FC<PauseModalProps> = ({
         </div>
 
         <div className="space-y-2.5">
+          {pointerLockNotice && (
+            <div className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-300 text-xs font-mono-tech text-center">
+              {pointerLockNotice}
+            </div>
+          )}
           <button
             onClick={onResume}
             className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition cursor-pointer"
@@ -190,6 +199,18 @@ export const PauseModal: React.FC<PauseModalProps> = ({
           </button>
         </div>
       </div>
+
+      {onOpenAdmin && (
+        <button
+          type="button"
+          onClick={onOpenAdmin}
+          title="Developer Console"
+          aria-label="Open Developer Console"
+          className="absolute bottom-5 right-5 p-2 rounded-lg bg-[#0C1017]/80 hover:bg-slate-800 border border-slate-800 text-slate-600 hover:text-amber-400 transition cursor-pointer"
+        >
+          <Terminal className="w-3.5 h-3.5" />
+        </button>
+      )}
     </div>
   );
 };

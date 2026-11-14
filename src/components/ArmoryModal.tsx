@@ -4,28 +4,45 @@
  */
 
 import React, { useState } from 'react';
-import { INITIAL_WEAPONS, WeaponDef } from '../game/weapons';
+import {
+  buildFourSlotLoadout,
+  SLOT4_OPTIONS,
+  Slot4Choice,
+  WeaponDef,
+} from '../game/weapons';
 import { X, Check, Crosshair } from 'lucide-react';
 
 interface ArmoryModalProps {
   preferredSlot: number;
-  onPreviewSlot: (slotIndex: number) => void;
+  slot4Choice: Slot4Choice;
+  onPreviewSlot: (slotIndex: number, overrideSlot4?: Slot4Choice) => void;
   onSelectSlot: (slotIndex: number) => void;
+  onChangeSlot4: (choice: Slot4Choice) => void;
   onClose: () => void;
 }
 
 export const ArmoryModal: React.FC<ArmoryModalProps> = ({
   preferredSlot,
+  slot4Choice,
   onPreviewSlot,
   onSelectSlot,
+  onChangeSlot4,
   onClose,
 }) => {
-  const [selectedIdx, setSelectedIdx] = useState<number>(preferredSlot);
-  const current: WeaponDef = INITIAL_WEAPONS[selectedIdx] || INITIAL_WEAPONS[0];
+  const safePreferred = Math.max(0, Math.min(3, preferredSlot || 0));
+  const [selectedIdx, setSelectedIdx] = useState<number>(safePreferred);
+  const loadout = buildFourSlotLoadout(slot4Choice);
+  const current: WeaponDef = loadout[selectedIdx] || loadout[0];
 
   const handleSelectTab = (idx: number) => {
     setSelectedIdx(idx);
-    onPreviewSlot(idx);
+    onPreviewSlot(idx, slot4Choice);
+  };
+
+  const handleChangeSlot4 = (choice: Slot4Choice) => {
+    onChangeSlot4(choice);
+    setSelectedIdx(3);
+    onPreviewSlot(3, choice);
   };
 
   const handleSetPrimary = () => {
@@ -34,7 +51,7 @@ export const ArmoryModal: React.FC<ArmoryModalProps> = ({
   };
 
   const handleCancel = () => {
-    onPreviewSlot(preferredSlot);
+    onPreviewSlot(safePreferred, slot4Choice);
     onClose();
   };
 
@@ -52,7 +69,7 @@ export const ArmoryModal: React.FC<ArmoryModalProps> = ({
 
   return (
     <div className="absolute inset-0 z-40 flex justify-end p-4 md:p-6 pointer-events-none select-none">
-      <div className="max-w-md w-full h-full max-h-[700px] my-auto bg-[#131A26]/95 border border-slate-700/80 rounded-2xl p-6 shadow-2xl relative text-slate-100 flex flex-col justify-between pointer-events-auto overflow-y-auto">
+      <div className="max-w-md w-full h-full max-h-[720px] my-auto bg-[#131A26]/95 border border-slate-700/80 rounded-2xl p-6 shadow-2xl relative text-slate-100 flex flex-col justify-between pointer-events-auto overflow-y-auto">
         <div>
           <button
             onClick={handleCancel}
@@ -64,24 +81,24 @@ export const ArmoryModal: React.FC<ArmoryModalProps> = ({
 
           <div className="mb-4">
             <div className="text-xs font-mono-tech text-cyan-400 tracking-wider uppercase">
-              Tactical Equipment · Live Preview
+              Fixed 4-Slot Arsenal · Live Preview
             </div>
             <h2 className="text-2xl font-display font-bold tracking-tight text-white mt-0.5">
               Armory &amp; Loadout
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              Drag the 3D bay to inspect the equipped weapon in your operative&apos;s hands.
+              Operatives deploy with strictly 4 active loadout slots (Keys 1–4). Drag the 3D bay to inspect.
             </p>
           </div>
 
-          {/* 7-Slot Selector Tabs */}
+          {/* 4-Slot Selector Grid */}
           <div className="grid grid-cols-2 gap-2 mb-4">
-            {INITIAL_WEAPONS.map((wep, idx) => {
+            {loadout.map((wep, idx) => {
               const active = selectedIdx === idx;
-              const isDefault = preferredSlot === idx;
+              const isDefault = safePreferred === idx;
               return (
                 <button
-                  key={wep.id}
+                  key={`${wep.id}-${idx}`}
                   onClick={() => handleSelectTab(idx)}
                   className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
                     active
@@ -99,6 +116,35 @@ export const ArmoryModal: React.FC<ArmoryModalProps> = ({
             })}
           </div>
 
+          {/* Slot 4 Reserve Selector (.50 Desert Python vs Nano-Medkit) */}
+          <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3 mb-4">
+            <div className="flex items-center justify-between text-[11px] font-mono-tech mb-2">
+              <span className="text-slate-300 font-semibold">Slot 4 Tactical Reserve</span>
+              <span className="text-amber-400">Sidearm or Medkit</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-900 rounded-lg border border-slate-800">
+              {SLOT4_OPTIONS.map((opt) => {
+                const chosen = slot4Choice === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => handleChangeSlot4(opt.id as Slot4Choice)}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition whitespace-nowrap shrink-0 cursor-pointer ${
+                      chosen
+                        ? opt.id === 'nano_medkit'
+                          ? 'bg-emerald-500 text-slate-950'
+                          : 'bg-cyan-500 text-slate-950'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {opt.shortName}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Selected Item Detail Panel */}
           <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-4 mb-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
@@ -110,7 +156,7 @@ export const ArmoryModal: React.FC<ArmoryModalProps> = ({
             <p className="text-xs text-slate-400 leading-relaxed mb-4">{current.description}</p>
 
             {current.type === 'medkit' ? (
-              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 font-mono-tech text-xs">
+              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 font-mono-tech text-xs tabular-nums">
                 <div>
                   <div className="text-slate-500">Health</div>
                   <div className="text-emerald-400 font-bold mt-0.5">+60 HP</div>
@@ -124,23 +170,8 @@ export const ArmoryModal: React.FC<ArmoryModalProps> = ({
                   <div className="text-white font-bold mt-0.5">2 / {current.maxReserve}</div>
                 </div>
               </div>
-            ) : current.type === 'grenade' ? (
-              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 font-mono-tech text-xs">
-                <div>
-                  <div className="text-slate-500">Blast Dmg</div>
-                  <div className="text-amber-400 font-bold mt-0.5">{current.damage} HP</div>
-                </div>
-                <div>
-                  <div className="text-slate-500">Stun Radius</div>
-                  <div className="text-cyan-400 font-bold mt-0.5">9.5m · 2.5s</div>
-                </div>
-                <div>
-                  <div className="text-slate-500">Capacity</div>
-                  <div className="text-white font-bold mt-0.5">2 / {current.maxReserve}</div>
-                </div>
-              </div>
             ) : (
-              <div className="space-y-3 pt-3 border-t border-slate-800/80">
+              <div className="space-y-3 pt-3 border-t border-slate-800/80 tabular-nums">
                 <div>
                   <div className="flex justify-between text-xs font-mono-tech mb-1">
                     <span className="text-slate-400">Damage Output</span>
@@ -197,7 +228,7 @@ export const ArmoryModal: React.FC<ArmoryModalProps> = ({
               onClick={handleSetPrimary}
               className="flex-1 px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition cursor-pointer whitespace-nowrap"
             >
-              {preferredSlot === selectedIdx ? (
+              {safePreferred === selectedIdx ? (
                 <>
                   <Check className="w-4 h-4 stroke-[3]" /> Equipped Primary
                 </>

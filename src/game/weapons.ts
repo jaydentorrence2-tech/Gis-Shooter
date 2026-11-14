@@ -1,18 +1,16 @@
 /**
  * Tactical Weapon Definitions & Ultra-Detailed Multi-Component PBR Viewmodel Builders
- * Slots:
+ * Strict 4-Slot Loadout System:
  *  1: AR-X7 Tactical (Assault Rifle)
- *  2: Vector-V9 Tactical (Suppressed High-ROF SMG)
- *  3: SG-12 Breach (Pump-Action Shotgun)
- *  4: SR-50 Marksman (Bolt-Action Suppressed Sniper)
- *  5: .50 Desert Python (Heavy Magnum Pistol)
- *  6: M84 Flash-Frag (Concussion Stun-Frag Grenade)
- *  7: Nano-Medkit (Bio-Gel Syringe)
+ *  2: SG-12 Breach (Pump-Action Shotgun)
+ *  3: SR-50 Marksman (Bolt-Action Suppressed Sniper)
+ *  4: .50 Desert Python (Heavy Magnum Pistol) OR Nano-Medkit (Bio-Gel Syringe)
  */
 
 import * as THREE from 'three';
 
 export type WeaponType = 'rifle' | 'smg' | 'shotgun' | 'sniper' | 'pistol' | 'grenade' | 'medkit';
+export type Slot4Choice = 'desert_python' | 'nano_medkit';
 
 export interface WeaponDef {
   id: string;
@@ -37,157 +35,131 @@ export interface WeaponDef {
   description: string;
 }
 
+const AR_X7_DEF: WeaponDef = {
+  id: 'ar_x7',
+  name: 'AR-X7 Tactical',
+  shortName: 'AR-X7',
+  type: 'rifle',
+  slot: 1,
+  damage: 38,
+  fireRate: 0.105,
+  magSize: 30,
+  maxReserve: 150,
+  currentAmmo: 30,
+  reserveAmmo: 120,
+  reloadTime: 1.75,
+  spread: 0.036,
+  adsSpread: 0.006,
+  adsFov: 54,
+  range: 130,
+  caliber: '6.8MM SPC',
+  description:
+    'Modular assault carbine with moving bolt carrier, charging handle, holographic reflex optic, laser sight, and tactical light.',
+};
+
+const SG_12_DEF: WeaponDef = {
+  id: 'sg_12',
+  name: 'SG-12 Breach',
+  shortName: 'SG-12',
+  type: 'shotgun',
+  slot: 2,
+  damage: 22,
+  pellets: 8,
+  fireRate: 0.78,
+  magSize: 8,
+  maxReserve: 40,
+  currentAmmo: 8,
+  reserveAmmo: 32,
+  reloadTime: 2.1,
+  spread: 0.088,
+  adsSpread: 0.048,
+  adsFov: 60,
+  range: 46,
+  caliber: '12 GAUGE',
+  description:
+    'Pump-action tactical shotgun with ventilated barrel heat shield, animated pump forend, bolt carrier, and underbarrel torch.',
+};
+
+const SR_50_DEF: WeaponDef = {
+  id: 'sr_50',
+  name: 'SR-50 Marksman',
+  shortName: 'SR-50',
+  type: 'sniper',
+  slot: 3,
+  damage: 120,
+  fireRate: 1.05,
+  magSize: 5,
+  maxReserve: 25,
+  currentAmmo: 5,
+  reserveAmmo: 20,
+  reloadTime: 2.35,
+  spread: 0.055,
+  adsSpread: 0.0008,
+  adsFov: 26,
+  range: 220,
+  caliber: '.338 SUPP',
+  description:
+    'Long-range precision marksman rifle with integral suppressor, variable 8x reflective optic scope, bolt handle, and folding bipod.',
+};
+
+const DESERT_PYTHON_DEF: WeaponDef = {
+  id: 'desert_python',
+  name: '.50 Desert Python',
+  shortName: '.50 PYTHON',
+  type: 'pistol',
+  slot: 4,
+  damage: 65,
+  headshotMultiplier: 3.0,
+  fireRate: 0.34,
+  magSize: 7,
+  maxReserve: 42,
+  currentAmmo: 7,
+  reserveAmmo: 35,
+  reloadTime: 1.35,
+  spread: 0.026,
+  adsSpread: 0.004,
+  adsFov: 60,
+  range: 95,
+  caliber: '.50 AE MAG',
+  description:
+    'Heavy magnum sidearm featuring brushed steel reciprocating slide with last-shot hold-open, rib barrel, and underbarrel laser.',
+};
+
+const NANO_MEDKIT_DEF: WeaponDef = {
+  id: 'nano_medkit',
+  name: 'Nano-Medkit',
+  shortName: 'MEDKIT',
+  type: 'medkit',
+  slot: 4,
+  damage: 0,
+  fireRate: 1.0,
+  magSize: 1,
+  maxReserve: 3,
+  currentAmmo: 2,
+  reserveAmmo: 2,
+  reloadTime: 0.5,
+  spread: 0,
+  adsSpread: 0,
+  adsFov: 68,
+  range: 0,
+  caliber: 'BIO-GEL',
+  description:
+    'Pressurized nanite combat injector restoring +60 HP and +35 Armor immediately on activation.',
+};
+
+export const SLOT4_OPTIONS: WeaponDef[] = [DESERT_PYTHON_DEF, NANO_MEDKIT_DEF];
+
 export const INITIAL_WEAPONS: WeaponDef[] = [
-  {
-    id: 'ar_x7',
-    name: 'AR-X7 Tactical',
-    shortName: 'AR-X7',
-    type: 'rifle',
-    slot: 1,
-    damage: 38,
-    fireRate: 0.105,
-    magSize: 30,
-    maxReserve: 150,
-    currentAmmo: 30,
-    reserveAmmo: 120,
-    reloadTime: 1.75,
-    spread: 0.036,
-    adsSpread: 0.006,
-    adsFov: 54,
-    range: 130,
-    caliber: '6.8MM SPC',
-    description:
-      'Modular assault carbine with moving bolt carrier, charging handle, holographic reflex optic, laser sight, and tactical light.',
-  },
-  {
-    id: 'vector_v9',
-    name: 'Vector-V9 Tactical',
-    shortName: 'VECTOR-V9',
-    type: 'smg',
-    slot: 2,
-    damage: 28,
-    fireRate: 0.062,
-    magSize: 36,
-    maxReserve: 180,
-    currentAmmo: 36,
-    reserveAmmo: 144,
-    reloadTime: 1.45,
-    spread: 0.044,
-    adsSpread: 0.014,
-    adsFov: 58,
-    range: 75,
-    caliber: '9MM AP',
-    description:
-      'Compact CQB submachine gun with blistering 960 RPM cyclic rate, integrated suppressor, straight stick mag, and micro red-dot.',
-  },
-  {
-    id: 'sg_12',
-    name: 'SG-12 Breach',
-    shortName: 'SG-12',
-    type: 'shotgun',
-    slot: 3,
-    damage: 22,
-    pellets: 8,
-    fireRate: 0.78,
-    magSize: 8,
-    maxReserve: 40,
-    currentAmmo: 8,
-    reserveAmmo: 32,
-    reloadTime: 2.1,
-    spread: 0.088,
-    adsSpread: 0.048,
-    adsFov: 60,
-    range: 46,
-    caliber: '12 GAUGE',
-    description:
-      'Pump-action tactical shotgun with ventilated barrel heat shield, animated pump forend, bolt carrier, and underbarrel torch.',
-  },
-  {
-    id: 'sr_50',
-    name: 'SR-50 Marksman',
-    shortName: 'SR-50',
-    type: 'sniper',
-    slot: 4,
-    damage: 120,
-    fireRate: 1.05,
-    magSize: 5,
-    maxReserve: 25,
-    currentAmmo: 5,
-    reserveAmmo: 20,
-    reloadTime: 2.35,
-    spread: 0.055,
-    adsSpread: 0.0008,
-    adsFov: 26,
-    range: 220,
-    caliber: '.338 SUPP',
-    description:
-      'Long-range precision marksman rifle with integral suppressor, variable 8x reflective optic scope, bolt handle, and folding bipod.',
-  },
-  {
-    id: 'desert_python',
-    name: '.50 Desert Python',
-    shortName: '.50 PYTHON',
-    type: 'pistol',
-    slot: 5,
-    damage: 65,
-    headshotMultiplier: 3.0,
-    fireRate: 0.34,
-    magSize: 7,
-    maxReserve: 42,
-    currentAmmo: 7,
-    reserveAmmo: 35,
-    reloadTime: 1.35,
-    spread: 0.026,
-    adsSpread: 0.004,
-    adsFov: 60,
-    range: 95,
-    caliber: '.50 AE MAG',
-    description:
-      'Heavy magnum sidearm featuring brushed steel reciprocating slide with last-shot hold-open, rib barrel, and underbarrel laser.',
-  },
-  {
-    id: 'flash_frag',
-    name: 'M84 Flash-Frag',
-    shortName: 'FLASH-FRAG',
-    type: 'grenade',
-    slot: 6,
-    damage: 145,
-    fireRate: 0.9,
-    magSize: 3,
-    maxReserve: 4,
-    currentAmmo: 2,
-    reserveAmmo: 0,
-    reloadTime: 0.6,
-    spread: 0,
-    adsSpread: 0,
-    adsFov: 68,
-    range: 36,
-    caliber: 'CONCUSSION',
-    description:
-      'Dual-stage tactical grenade that deals 145 blast damage in a 9.5m radius and stuns surviving hostiles for 2.5s.',
-  },
-  {
-    id: 'nano_medkit',
-    name: 'Nano-Medkit',
-    shortName: 'MEDKIT',
-    type: 'medkit',
-    slot: 7,
-    damage: 0,
-    fireRate: 1.0,
-    magSize: 1,
-    maxReserve: 3,
-    currentAmmo: 2,
-    reserveAmmo: 2,
-    reloadTime: 0.5,
-    spread: 0,
-    adsSpread: 0,
-    adsFov: 68,
-    range: 0,
-    caliber: 'BIO-GEL',
-    description:
-      'Pressurized nanite combat injector restoring +60 HP and +35 Armor immediately on activation.',
-  },
+  AR_X7_DEF,
+  SG_12_DEF,
+  SR_50_DEF,
+  DESERT_PYTHON_DEF,
 ];
+
+export function buildFourSlotLoadout(slot4Choice: Slot4Choice = 'desert_python'): WeaponDef[] {
+  const slot4 = slot4Choice === 'nano_medkit' ? NANO_MEDKIT_DEF : DESERT_PYTHON_DEF;
+  return JSON.parse(JSON.stringify([AR_X7_DEF, SG_12_DEF, SR_50_DEF, slot4]));
+}
 
 // --- Procedural PBR Surface Wear & Grip Textures (Cached Once) ---
 interface WeaponMaterials {

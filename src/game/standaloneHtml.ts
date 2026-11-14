@@ -14,6 +14,7 @@ export function generateStandaloneHtml(): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230C1017'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%2322d3ee' stroke-width='2'/%3E%3Cpath d='M16 4v6M16 22v6M4 16h6M22 16h6' stroke='%2322d3ee' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E" />
   <title>GIS Shooter: Tactical Edition</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -69,9 +70,11 @@ export function generateStandaloneHtml(): string {
     .bar-ap { height: 100%; width: 100%; background: linear-gradient(90deg, #2563eb, #06b6d4); transition: width 0.15s; }
 
     .arsenal-hud { position: absolute; bottom: 24px; right: 24px; display: flex; align-items: flex-end; gap: 12px; }
-    .slot-list { display: flex; flex-direction: column; gap: 3px; }
-    .slot-row { display: flex; justify-content: space-between; gap: 10px; min-width: 146px; padding: 3px 9px; border-radius: 7px; border: 1px solid #1e293b; background: rgba(12,16,23,0.9); font-size: 11px; color: #94a3b8; }
-    .slot-row.active { border-color: #22d3ee; background: rgba(6,182,212,0.18); color: #67e8f9; }
+    .slot-list { display: flex; flex-direction: column; gap: 6px; }
+    .slot-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 210px; padding: 6px 11px; border-radius: 10px; border: 1px solid #1e293b; background: rgba(12,16,23,0.92); font-size: 11px; color: #94a3b8; transition: all 0.15s; }
+    .slot-row.active { border-color: #22d3ee; background: rgba(6,182,212,0.22); color: #ffffff; box-shadow: 0 0 16px rgba(6,182,212,0.28); }
+    .slot-key { width: 20px; height: 20px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; background: #0f172a; border: 1px solid #334155; color: #94a3b8; flex-shrink: 0; }
+    .slot-row.active .slot-key { background: #22d3ee; border-color: #22d3ee; color: #020617; }
     .ammo-card { background: rgba(12,16,23,0.9); border: 1px solid rgba(51,65,85,0.85); border-radius: 14px; padding: 14px 18px; min-width: 222px; text-align: right; }
     .flash-badge { font-size: 10px; padding: 2px 6px; border-radius: 5px; border: 1px solid #334155; color: #64748b; background: rgba(15,23,42,0.8); }
     .flash-badge.on { border-color: rgba(251,191,36,0.7); color: #fcd34d; background: rgba(245,158,11,0.16); }
@@ -119,8 +122,16 @@ export function generateStandaloneHtml(): string {
     input[type="range"] { width: 100%; accent-color: #06b6d4; cursor: pointer; }
     input[type="text"] { width: 100%; padding: 10px 14px; border-radius: 10px; border: 1px solid #334155; background: #0C1017; color: #67e8f9; font-family: 'JetBrains Mono', monospace; font-weight: 700; outline: none; }
     input[type="text"]:focus { border-color: #06b6d4; }
+    .patch-btn { position: absolute; top: 28px; right: 56px; pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 11px; background: rgba(19,26,38,0.94); border: 1px solid rgba(6,182,212,0.42); color: #67e8f9; font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+    .patch-btn:hover { background: #1e293b; }
+    .admin-corner-btn { padding: 7px 9px; border-radius: 8px; background: rgba(12,16,23,0.82); border: 1px solid #1e293b; color: #475569; font-size: 11px; cursor: pointer; transition: color 0.15s, background 0.15s; }
+    .admin-corner-btn:hover { background: #1e293b; color: #fbbf24; }
+    .adm-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: #0B101B; border: 1px solid #1e293b; }
+    .adm-tab { padding: 7px 12px; border-radius: 7px; border: none; background: transparent; color: #cbd5e1; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .adm-tab.active { background: #f59e0b; color: #020617; font-weight: 700; }
     @media (max-width: 720px) {
       #main-menu { padding: 20px; }
+      .patch-btn { top: 14px; right: 16px; }
       .orbit-hint { display: none; }
       .grid-4 { grid-template-columns: repeat(2, 1fr); }
       .grid-3 { grid-template-columns: repeat(2, 1fr); }
@@ -195,6 +206,7 @@ export function generateStandaloneHtml(): string {
         <span style="color:#475569;">·</span>
         <span id="fps-preset" style="color:#67e8f9;font-weight:700;text-transform:uppercase;">HIGH</span>
       </div>
+      <div id="hud-cheat-bar" style="display:none;background:rgba(12,16,23,0.92);border:1px solid rgba(245,158,11,0.55);border-radius:8px;padding:4px 10px;font-size:11px;color:#fcd34d;gap:8px;align-items:center;"></div>
       <div id="killfeed"></div>
     </div>
 
@@ -238,7 +250,7 @@ export function generateStandaloneHtml(): string {
       </div>
     </div>
 
-    <div class="key-hint font-mono">WASD Move · C Crouch · L-Click Fire · R-Click ADS · R Reload · F Light · 1–7 / Scroll Swap · Q Quick-Switch · Tab Inventory</div>
+    <div class="key-hint font-mono">WASD Move · C Crouch · L-Click Fire · R-Click ADS · R Reload · F Light · 1–4 / Scroll Swap · Q Quick-Switch · Tab Inventory</div>
   </div>
 
   <!-- MAIN MENU -->
@@ -269,19 +281,24 @@ export function generateStandaloneHtml(): string {
         <button id="btn-crosshair" class="btn-sec" style="color:#34d399;">Crosshair Settings</button>
       </div>
       <button id="btn-leaderboard" class="btn-sec" style="width:100%;margin-bottom:14px;color:#fcd34d;border-color:rgba(245,158,11,0.4);">Leaderboard</button>
-      <div class="font-mono" style="font-size:11px;color:#64748b;">WASD Move · C Crouch · Shift Sprint · Space Jump · L-Click Fire · R-Click Aim · R Reload · F Light · 1–7 / Scroll Swap · Q Quick-Switch · Tab Inventory</div>
+      <div class="font-mono" style="font-size:11px;color:#64748b;">WASD Move · C Crouch · Shift Sprint · Space Jump · L-Click Fire · R-Click Aim · R Reload · F Light · 1–4 / Scroll Swap · Q Quick-Switch · Tab Inventory</div>
     </div>
-    <div class="orbit-hint font-mono">Drag to Orbit Hangar · Scroll to Zoom</div>
+    <button id="btn-patch-notes" class="patch-btn font-mono">Patch Notes (v1.5)</button>
+    <div style="position:absolute;bottom:24px;right:56px;pointer-events:auto;display:flex;align-items:center;gap:8px;">
+      <div class="orbit-hint font-mono">Drag to Orbit Hangar · Scroll to Zoom</div>
+      <button id="btn-menu-admin" class="admin-corner-btn font-mono" title="Developer Console">&gt;_</button>
+    </div>
   </div>
 
   <!-- ARMORY SIDE DRAWER -->
   <div id="modal-armory" class="drawer-backdrop">
     <div class="drawer-box">
       <button class="close-btn" onclick="closeModals()">✕</button>
-      <div class="font-mono" style="font-size:11px;color:#22d3ee;text-transform:uppercase;">Tactical Equipment · Live Preview</div>
+      <div class="font-mono" style="font-size:11px;color:#22d3ee;text-transform:uppercase;">Fixed 4-Slot Arsenal · Live Preview</div>
       <h2 class="font-display" style="font-size:24px;margin:2px 0 6px;">Armory &amp; Loadout</h2>
-      <p style="font-size:12px;color:#94a3b8;margin-bottom:14px;">Drag the 3D bay to inspect the weapon in your operative's hands.</p>
-      <div id="armory-grid" class="grid-2" style="margin-bottom:14px;"></div>
+      <p style="font-size:12px;color:#94a3b8;margin-bottom:12px;">Operatives deploy with strictly 4 active loadout slots (Keys 1–4). Drag the 3D bay to inspect.</p>
+      <div id="armory-grid" class="grid-2" style="margin-bottom:10px;"></div>
+      <div id="armory-slot4-bar" class="card" style="background:#0C1017;padding:10px 12px;margin-bottom:12px;"></div>
       <div id="armory-detail" class="card" style="background:#0C1017;"></div>
     </div>
   </div>
@@ -406,7 +423,7 @@ export function generateStandaloneHtml(): string {
   <div id="modal-inventory" class="modal-backdrop">
     <div class="modal-box wide">
       <button class="close-btn" id="inv-close">✕</button>
-      <div class="font-mono" style="font-size:11px;color:#22d3ee;text-transform:uppercase;">Field Loadout · Scroll Wheel or 1–7 to Switch · Tab or I to return</div>
+      <div class="font-mono" style="font-size:11px;color:#22d3ee;text-transform:uppercase;">Fixed 4-Slot Loadout · Press 1–4 or Scroll Wheel to Switch · Tab or I to Return</div>
       <h2 class="font-display" style="font-size:24px;margin:2px 0 16px;">Tactical Inventory</h2>
       <div id="inv-grid" class="grid-4" style="max-height:66vh;overflow-y:auto;"></div>
     </div>
@@ -428,11 +445,13 @@ export function generateStandaloneHtml(): string {
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>Mouse Sensitivity</span><span id="pause-sens-val" class="font-mono" style="color:#22d3ee;">1.0x</span></div>
         <input type="range" id="pause-sens" min="0.2" max="3.0" step="0.1" value="1.0" />
       </div>
+      <div id="pause-lock-note" class="font-mono" style="display:none;margin-bottom:8px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.45);color:#fcd34d;font-size:11px;"></div>
       <button id="btn-resume" class="btn-primary" style="font-size:14px;padding:12px;margin-bottom:8px;">Resume</button>
       <button id="btn-pause-crosshair" class="btn-sec" style="width:100%;margin-bottom:8px;color:#34d399;">Crosshair Settings</button>
       <button id="btn-restart" class="btn-sec" style="width:100%;margin-bottom:8px;">Restart Match</button>
       <button id="btn-tomenu" class="btn-sec" style="width:100%;">Main Menu</button>
     </div>
+    <button id="btn-pause-admin" class="admin-corner-btn font-mono" style="position:absolute;bottom:18px;right:18px;" title="Developer Console">&gt;_</button>
   </div>
 
   <!-- LEADERBOARD CENTERED MODAL -->
@@ -498,6 +517,101 @@ export function generateStandaloneHtml(): string {
     </div>
   </div>
 
+  <!-- PATCH NOTES MODAL (v1.5) -->
+  <div id="modal-patchnotes" class="modal-backdrop" style="z-index:62;">
+    <div class="lb-box" style="max-width:740px;">
+      <div style="padding:16px 24px;border-bottom:1px solid #1e293b;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div>
+          <h2 class="font-display" style="font-size:22px;color:#fff;">Patch Notes</h2>
+          <div class="font-mono" style="font-size:11px;color:#94a3b8;">GIS Shooter: Tactical Edition · Release v1.5 · Update History</div>
+        </div>
+        <button id="pn-close-x" class="close-btn" style="position:static;">✕</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:18px;">
+        <div>
+          <div class="font-mono" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+            <span><strong style="font-size:17px;color:#34d399;">v1.5</strong> <span style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-left:8px;">Latest Update</span></span>
+            <span style="font-size:11px;color:#64748b;">Nov 2026</span>
+          </div>
+          <h3 class="font-display" style="font-size:15px;color:#fff;margin-bottom:8px;">Performance Overhaul, Ballistic Rebalance &amp; Vampirism</h3>
+          <div style="font-size:13px;color:#cbd5e1;line-height:1.55;display:flex;flex-direction:column;gap:6px;">
+            <div><strong style="color:#fff;">Potato Mode (Max FPS):</strong> Added 3-tier Graphics Presets (High / Medium / Potato Mode) with 0.75x pixel scale, shadow/AA disable, Lambert material swap, close-range fog, and an always-on top-right FPS counter.</div>
+            <div><strong style="color:#fff;">Weapon Damage Buff:</strong> Rebalanced AR-X7 (38 dmg), SG-12 (22x8 pellets), SR-50 (120 dmg), Vector-V9 (28 dmg), and .50 Desert Python (65 dmg / 3.0x headshot), plus floating damage numbers &amp; micro screen shake.</div>
+            <div><strong style="color:#fff;">Vampire Kill-Heal:</strong> Eliminating hostile bots restores +10% Max HP (+25% on Wave 10 Boss) with floating green indicator and audio chime.</div>
+            <div><strong style="color:#fff;">Developer Console &amp; Patch GUI:</strong> Added PIN-protected Secret Admin Panel (Shift+F12 / gisadmin) and Main Menu Patch Notes modal.</div>
+          </div>
+        </div>
+        <div style="padding-top:16px;border-top:1px solid #1e293b;">
+          <div class="font-mono" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+            <span><strong style="font-size:17px;color:#fbbf24;">v1.4</strong> <span style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-left:8px;">Boss &amp; Combat Flow</span></span>
+            <span style="font-size:11px;color:#64748b;">Oct 2026</span>
+          </div>
+          <h3 class="font-display" style="font-size:15px;color:#fff;margin-bottom:6px;">Wave 10 Boss Encounter &amp; Empty-Mag Auto-Reload</h3>
+          <div style="font-size:13px;color:#cbd5e1;line-height:1.55;">Introduced Boss <strong style="color:#fff;">The Specialist Anestesi</strong> on Wave 10 with syringe darts, toxic gas hazards, scalpel dashes, plus automatic empty-mag reload.</div>
+        </div>
+        <div style="padding-top:16px;border-top:1px solid #1e293b;">
+          <div class="font-mono" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+            <span><strong style="font-size:17px;color:#22d3ee;">v1.3</strong> <span style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-left:8px;">Social &amp; Arsenal UX</span></span>
+            <span style="font-size:11px;color:#64748b;">Sep 2026</span>
+          </div>
+          <h3 class="font-display" style="font-size:15px;color:#fff;margin-bottom:6px;">Interactive Leaderboard Profiles &amp; Scroll Wheel Swap</h3>
+          <div style="font-size:13px;color:#cbd5e1;line-height:1.55;">Added clickable Operator Profile Cards inside the Global Leaderboard and smooth scroll-wheel weapon cycling.</div>
+        </div>
+        <div style="padding-top:16px;border-top:1px solid #1e293b;">
+          <div class="font-mono" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+            <span><strong style="font-size:17px;color:#94a3b8;">v1.2</strong> <span style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-left:8px;">Foundation Release</span></span>
+            <span style="font-size:11px;color:#64748b;">Aug 2026</span>
+          </div>
+          <h3 class="font-display" style="font-size:15px;color:#fff;margin-bottom:6px;">3D Interactive Tactical Lobby &amp; Crosshair Studio</h3>
+          <div style="font-size:13px;color:#cbd5e1;line-height:1.55;">Launched the 3D Hangar Deployment Bay with orbit controls and full custom crosshair studio.</div>
+        </div>
+      </div>
+      <div style="padding:12px 24px;border-top:1px solid #1e293b;background:#0B101B;display:flex;justify-content:space-between;align-items:center;">
+        <span class="font-mono" style="font-size:11px;color:#64748b;">Active Build: v1.5 Tactical Edition</span>
+        <button id="pn-close-btn" class="btn-primary" style="width:auto;padding:8px 18px;font-size:12px;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN PIN GATE MODAL -->
+  <div id="modal-admin-pin" class="modal-backdrop" style="z-index:70;">
+    <div class="modal-box" style="max-width:380px;border-color:rgba(245,158,11,0.5);">
+      <button id="adm-pin-close-x" class="close-btn">✕</button>
+      <div class="font-mono" style="font-size:11px;color:#fbbf24;text-transform:uppercase;letter-spacing:0.08em;">Restricted Console</div>
+      <h2 class="font-display" style="font-size:20px;color:#fff;margin:2px 0 8px;">Admin PIN Required</h2>
+      <p style="font-size:12px;color:#94a3b8;margin-bottom:14px;">Enter developer PIN to unlock Wave/Boss testing, Combat Cheats, and Leaderboard moderation.</p>
+      <form id="adm-pin-form">
+        <input id="adm-pin-input" type="password" inputmode="numeric" maxlength="12" placeholder="Enter Developer PIN" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid #334155;background:#0C1017;color:#fcd34d;font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:0.15em;outline:none;margin-bottom:8px;" />
+        <div id="adm-pin-err" class="font-mono" style="font-size:11px;color:#fb7185;min-height:16px;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:8px;">
+          <button type="button" id="adm-pin-cancel" class="btn-sec" style="padding:10px 16px;">Cancel</button>
+          <button type="submit" class="btn-primary" style="background:#f59e0b;font-size:12px;padding:10px;">Unlock Console</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- SECRET DEVELOPER CONSOLE MODAL -->
+  <div id="modal-admin" class="modal-backdrop" style="z-index:70;">
+    <div class="lb-box" style="border-color:rgba(245,158,11,0.48);">
+      <div style="padding:16px 24px;border-bottom:1px solid #1e293b;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div>
+          <h2 class="font-display" style="font-size:21px;color:#fff;">Developer Console</h2>
+          <div id="adm-subtitle" class="font-mono" style="font-size:11px;color:#94a3b8;">Admin Controls Active</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button id="adm-lock-btn" class="btn-sec" style="padding:6px 12px;color:#fcd34d;">Lock Console</button>
+          <button id="adm-close-x" class="close-btn" style="position:static;">✕</button>
+        </div>
+      </div>
+      <div style="padding:12px 24px;background:#0B101B;border-bottom:1px solid #1e293b;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;">
+        <div id="adm-tabs" class="adm-tabs"></div>
+        <div id="adm-notice" class="font-mono" style="font-size:12px;color:#34d399;font-weight:700;"></div>
+      </div>
+      <div id="adm-body" style="flex:1;overflow-y:auto;padding:20px 24px;"></div>
+    </div>
+  </div>
+
   <script>
   (function() {
     // =========================================================================
@@ -512,8 +626,8 @@ export function generateStandaloneHtml(): string {
     const DEFAULT_PROF = {
       callsign: 'SPECTRE-01', level: 1, xp: 0, totalKills: 0, totalHeadshots: 0,
       totalShots: 0, totalHits: 0, highScore: 0, highestWave: 1,
-      mouseSensitivity: 1.0, baseFov: 75, masterVolume: 0.7, accentColor: '#06b6d4', preferredSlot: 0,
-      crosshair: Object.assign({}, DEFAULT_CH), graphicsPreset: 'high', achievements: [], bossDefeatedCount: 0
+      mouseSensitivity: 1.0, baseFov: 75, masterVolume: 0.7, accentColor: '#06b6d4', preferredSlot: 0, slot4Choice: 'desert_python',
+      crosshair: Object.assign({}, DEFAULT_CH), graphicsPreset: 'high', achievements: [], bossDefeatedCount: 0, allUnlocked: false
     };
     let profile = Object.assign({}, DEFAULT_PROF, { crosshair: Object.assign({}, DEFAULT_CH), achievements: [] });
     try {
@@ -524,6 +638,9 @@ export function generateStandaloneHtml(): string {
         const parsed = JSON.parse(raw);
         profile = Object.assign({}, DEFAULT_PROF, parsed);
         profile.crosshair = Object.assign({}, DEFAULT_CH, parsed.crosshair || {});
+        profile.slot4Choice = profile.slot4Choice === 'nano_medkit' ? 'nano_medkit' : 'desert_python';
+        profile.preferredSlot = Math.max(0, Math.min(3, typeof profile.preferredSlot === 'number' ? Math.floor(profile.preferredSlot) : 0));
+        if (profile.slot4Choice === 'nano_medkit' && profile.preferredSlot === 3) profile.preferredSlot = 0;
         if (profile.graphicsPreset !== 'high' && profile.graphicsPreset !== 'medium' && profile.graphicsPreset !== 'potato') {
           profile.graphicsPreset = (savedGfx === 'medium' || savedGfx === 'potato') ? savedGfx : 'high';
         }
@@ -619,9 +736,54 @@ export function generateStandaloneHtml(): string {
       try { localStorage.setItem(LB_KEY, JSON.stringify(next)); } catch(e) {}
       return rec;
     }
+    const ADMIN_PIN = '2026';
+    const BAN_KEY = 'GIS_SHOOTER_BANNED_CALLSIGNS_V1';
+    const DEL_KEY = 'GIS_SHOOTER_DELETED_SCORES_V1';
+    function loadBanned() { try { const r = localStorage.getItem(BAN_KEY); const a = r ? JSON.parse(r) : []; return Array.isArray(a) ? a.map(s => String(s).trim().toUpperCase()) : []; } catch(e) { return []; } }
+    function loadDeletedIds() { try { const r = localStorage.getItem(DEL_KEY); const a = r ? JSON.parse(r) : []; return Array.isArray(a) ? a : []; } catch(e) { return []; } }
+    function banOrRemoveEntry(id, callsign) {
+      const del = new Set(loadDeletedIds()); del.add(id);
+      try { localStorage.setItem(DEL_KEY, JSON.stringify(Array.from(del))); } catch(e) {}
+      const loc = loadLocalLb().filter(e => e.id !== id);
+      try { localStorage.setItem(LB_KEY, JSON.stringify(loc)); } catch(e) {}
+      if (callsign && callsign.trim()) {
+        const b = new Set(loadBanned()); b.add(callsign.trim().toUpperCase());
+        try { localStorage.setItem(BAN_KEY, JSON.stringify(Array.from(b))); } catch(e) {}
+      }
+    }
+    function unbanEntryCallsign(cs) {
+      const norm = cs.trim().toUpperCase();
+      try { localStorage.setItem(BAN_KEY, JSON.stringify(loadBanned().filter(c => c !== norm))); } catch(e) {}
+    }
+    function clearAllBans() {
+      try { localStorage.setItem(BAN_KEY, '[]'); localStorage.setItem(DEL_KEY, '[]'); } catch(e) {}
+    }
+    function addCustomLbScore(cs, sc, wv, kl, ac) {
+      const cleanCs = (cs || 'OPERATIVE').trim().toUpperCase();
+      unbanEntryCallsign(cleanCs);
+      const loc = loadLocalLb(), wk = getWeekKey();
+      const idx = loc.findIndex(e => e.callsign.trim().toUpperCase() === cleanCs);
+      const rec = {
+        id: idx >= 0 ? loc[idx].id : 'adm_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+        callsign: cleanCs, countryCode: 'ID', flag: '🇮🇩',
+        kills: Math.max(0, Math.round(kl)), headshots: Math.round(Math.max(0, kl) * 0.45),
+        accuracy: Math.max(0, Math.min(100, Math.round(ac))),
+        survivalSec: Math.max(60, Math.round(wv) * 55 + Math.round(kl) * 4),
+        wave: Math.max(1, Math.min(99, Math.round(wv))),
+        score: Math.max(0, Math.round(sc)), xpEarned: Math.round(Math.max(0, sc) * 0.4),
+        timestamp: Date.now(), isPlayer: true, weekKey: wk,
+        level: Math.min(25, Math.max(1, Math.round(1 + wv * 1.2))), avatarColor: '#f59e0b', favoriteWeapon: 'AR-X7 Tactical'
+      };
+      if (idx >= 0) loc[idx] = Object.assign({}, loc[idx], rec); else loc.unshift(rec);
+      const next = loc.sort((a,b) => b.score - a.score || b.kills - a.kills || b.accuracy - a.accuracy).slice(0, 60);
+      try { localStorage.setItem(LB_KEY, JSON.stringify(next)); } catch(e) {}
+      return rec;
+    }
     function getMergedLb(tab) {
       const loc = loadLocalLb(), wk = getWeekKey(), me = profile.callsign.trim().toUpperCase();
+      const banSet = new Set(loadBanned()), delSet = new Set(loadDeletedIds());
       let pool = tab === 'personal' ? loc.slice() : tab === 'weekly' ? loc.filter(e => !e.weekKey || e.weekKey === wk).concat(getWeeklyBots(wk)) : loc.concat(GLOBAL_BOTS);
+      pool = pool.filter(e => !delSet.has(e.id) && !banSet.has((e.callsign || '').trim().toUpperCase()));
       pool.sort((a,b) => b.score - a.score || b.kills - a.kills || b.accuracy - a.accuracy);
       let bestRank = null;
       const rows = pool.slice(0, 100).map((r, i) => {
@@ -1040,17 +1202,23 @@ export function generateStandaloneHtml(): string {
     });
 
     // =========================================================================
-    // 5. 7-SLOT ARSENAL, ULTRA-DETAILED PBR VIEWMODELS & ATTACHMENTS
+    // 5. STRICT 4-SLOT ARSENAL, ULTRA-DETAILED PBR VIEWMODELS & ATTACHMENTS
     // =========================================================================
-    const WEAPON_TEMPLATES = [
+    const WEAPON_BASE_SLOTS = [
       { id: 'ar_x7', name: 'AR-X7 Tactical', shortName: 'AR-X7', type: 'rifle', slot: 1, damage: 38, fireRate: 0.105, magSize: 30, maxReserve: 150, currentAmmo: 30, reserveAmmo: 120, reloadTime: 1.75, spread: 0.036, adsSpread: 0.006, adsFov: 54, range: 130, caliber: '6.8MM SPC', desc: 'Modular assault carbine with moving bolt carrier, charging handle, holographic reflex optic, laser sight, and tactical light.' },
-      { id: 'vector_v9', name: 'Vector-V9 Tactical', shortName: 'VECTOR-V9', type: 'smg', slot: 2, damage: 28, fireRate: 0.062, magSize: 36, maxReserve: 180, currentAmmo: 36, reserveAmmo: 144, reloadTime: 1.45, spread: 0.044, adsSpread: 0.014, adsFov: 58, range: 75, caliber: '9MM AP', desc: 'Compact CQB submachine gun with 960 RPM cyclic rate, integrated suppressor, straight stick mag, and micro red-dot.' },
-      { id: 'sg_12', name: 'SG-12 Breach', shortName: 'SG-12', type: 'shotgun', slot: 3, damage: 22, pellets: 8, fireRate: 0.78, magSize: 8, maxReserve: 40, currentAmmo: 8, reserveAmmo: 32, reloadTime: 2.1, spread: 0.088, adsSpread: 0.048, adsFov: 60, range: 46, caliber: '12 GAUGE', desc: 'Pump-action tactical shotgun with ventilated barrel heat shield, animated pump forend, bolt carrier, and underbarrel torch.' },
-      { id: 'sr_50', name: 'SR-50 Marksman', shortName: 'SR-50', type: 'sniper', slot: 4, damage: 120, fireRate: 1.05, magSize: 5, maxReserve: 25, currentAmmo: 5, reserveAmmo: 20, reloadTime: 2.35, spread: 0.055, adsSpread: 0.0008, adsFov: 26, range: 220, caliber: '.338 SUPP', desc: 'Long-range precision marksman rifle with integral suppressor, variable 8x reflective optic scope, bolt handle, and folding bipod.' },
-      { id: 'desert_python', name: '.50 Desert Python', shortName: '.50 PYTHON', type: 'pistol', slot: 5, damage: 65, hsMult: 3.0, fireRate: 0.34, magSize: 7, maxReserve: 42, currentAmmo: 7, reserveAmmo: 35, reloadTime: 1.35, spread: 0.026, adsSpread: 0.004, adsFov: 60, range: 95, caliber: '.50 AE MAG', desc: 'Heavy magnum sidearm featuring brushed steel reciprocating slide with last-shot hold-open, rib barrel, and underbarrel laser.' },
-      { id: 'flash_frag', name: 'M84 Flash-Frag', shortName: 'FLASH-FRAG', type: 'grenade', slot: 6, damage: 145, fireRate: 0.9, magSize: 3, maxReserve: 4, currentAmmo: 2, reserveAmmo: 0, reloadTime: 0.6, spread: 0, adsSpread: 0, adsFov: 68, range: 36, caliber: 'CONCUSSION', desc: 'Dual-stage tactical grenade dealing 145 blast damage in a 9.5m radius and stunning surviving hostiles for 2.5s.' },
-      { id: 'nano_medkit', name: 'Nano-Medkit', shortName: 'MEDKIT', type: 'medkit', slot: 7, damage: 0, fireRate: 1.0, magSize: 1, maxReserve: 3, currentAmmo: 2, reserveAmmo: 2, reloadTime: 0.5, spread: 0, adsSpread: 0, adsFov: 68, range: 0, caliber: 'BIO-GEL', desc: 'Pressurized nanite injector restoring +60 HP and +35 Armor immediately.' }
+      { id: 'sg_12', name: 'SG-12 Breach', shortName: 'SG-12', type: 'shotgun', slot: 2, damage: 22, pellets: 8, fireRate: 0.78, magSize: 8, maxReserve: 40, currentAmmo: 8, reserveAmmo: 32, reloadTime: 2.1, spread: 0.088, adsSpread: 0.048, adsFov: 60, range: 46, caliber: '12 GAUGE', desc: 'Pump-action tactical shotgun with ventilated barrel heat shield, animated pump forend, bolt carrier, and underbarrel torch.' },
+      { id: 'sr_50', name: 'SR-50 Marksman', shortName: 'SR-50', type: 'sniper', slot: 3, damage: 120, fireRate: 1.05, magSize: 5, maxReserve: 25, currentAmmo: 5, reserveAmmo: 20, reloadTime: 2.35, spread: 0.055, adsSpread: 0.0008, adsFov: 26, range: 220, caliber: '.338 SUPP', desc: 'Long-range precision marksman rifle with integral suppressor, variable 8x reflective optic scope, bolt handle, and folding bipod.' }
     ];
+    const SLOT4_OPTIONS = [
+      { id: 'desert_python', name: '.50 Desert Python', shortName: '.50 PYTHON', type: 'pistol', slot: 4, damage: 65, hsMult: 3.0, fireRate: 0.34, magSize: 7, maxReserve: 42, currentAmmo: 7, reserveAmmo: 35, reloadTime: 1.35, spread: 0.026, adsSpread: 0.004, adsFov: 60, range: 95, caliber: '.50 AE MAG', desc: 'Heavy magnum sidearm featuring brushed steel reciprocating slide with last-shot hold-open, rib barrel, and underbarrel laser.' },
+      { id: 'nano_medkit', name: 'Nano-Medkit', shortName: 'MEDKIT', type: 'medkit', slot: 4, damage: 0, fireRate: 1.0, magSize: 1, maxReserve: 3, currentAmmo: 2, reserveAmmo: 2, reloadTime: 0.5, spread: 0, adsSpread: 0, adsFov: 68, range: 0, caliber: 'BIO-GEL', desc: 'Pressurized nanite injector restoring +60 HP and +35 Armor immediately.' }
+    ];
+    function buildFourSlotLoadout(choice) {
+      const c = choice || profile.slot4Choice || 'desert_python';
+      const s4 = c === 'nano_medkit' ? SLOT4_OPTIONS[1] : SLOT4_OPTIONS[0];
+      return JSON.parse(JSON.stringify([WEAPON_BASE_SLOTS[0], WEAPON_BASE_SLOTS[1], WEAPON_BASE_SLOTS[2], s4]));
+    }
+    const WEAPON_TEMPLATES = buildFourSlotLoadout('desert_python');
 
     function makeWearTextures() {
       const s = 256, rc = document.createElement('canvas'), bc = document.createElement('canvas');
@@ -1391,8 +1559,8 @@ export function generateStandaloneHtml(): string {
     // =========================================================================
     let state = {
       inMenu: true, paused: true, invOpen: false, dead: false,
-      hp: 100, ap: 100, score: 0, wave: 1, slot: profile.preferredSlot || 0, prevSlot: 4,
-      weapons: JSON.parse(JSON.stringify(WEAPON_TEMPLATES)),
+      hp: 100, ap: 100, score: 0, wave: 1, slot: Math.min(3, Math.max(0, profile.preferredSlot || 0)), prevSlot: 3,
+      weapons: buildFourSlotLoadout(),
       reloading: false, reloadT: 0, aiming: false, scoped: false, crouching: false, eyeH: 1.75,
       flashlight: false, flashGlare: 0, slowT: 0, inGas: false, bannerT: 0, bannerTitle: '', bannerSub: '', bannerTone: 'crimson',
       shootCd: 0, recoilPitch: 0, recoilZ: 0, boltKick: 0, pumpAnim: 0, spread: 0.14, dmgVignette: 0,
@@ -1401,6 +1569,8 @@ export function generateStandaloneHtml(): string {
       sKills: 0, sHs: 0, sShots: 0, sHits: 0, sXp: 0, survT: 0, submitted: false, subRank: null,
       wepKills: {}, killFeed: []
     };
+    const adminCheats = { godMode: false, infiniteAmmo: false, speedMult: 1.0, jumpMult: 1.0 };
+    let adminUnlocked = false, adminOpen = false, adminTab = 'wave', adminNotice = '';
     const keys = {}, euler = new THREE.Euler(0, 0, 0, 'YXZ');
     let playerPos = new THREE.Vector3(0, 1.75, 31), playerVel = new THREE.Vector3(), grounded = true;
     let isLocked = false, mouseDown = false, swayX = 0, swayY = 0, bobT = 0, stepDist = 0, lowHpT = 0, waveWait = 0;
@@ -1443,8 +1613,8 @@ export function generateStandaloneHtml(): string {
 
     function useMedkit() {
       const med = state.weapons.find(wp => wp.type === 'medkit');
-      if (!med || med.currentAmmo <= 0 || (state.hp >= 100 && state.ap >= 100)) return;
-      med.currentAmmo--;
+      if (!med || (!adminCheats.infiniteAmmo && med.currentAmmo <= 0) || (state.hp >= 100 && state.ap >= 100)) return;
+      if (!adminCheats.infiniteAmmo) med.currentAmmo--;
       state.hp = Math.min(100, state.hp + 60);
       state.ap = Math.min(100, state.ap + 35);
       AudioSys.heal(); updateHUD();
@@ -1463,7 +1633,7 @@ export function generateStandaloneHtml(): string {
     }
 
     function resolveFullWepName(wepLabel) {
-      const m = WEAPON_TEMPLATES.find(w => w.shortName === wepLabel || w.name === wepLabel);
+      const m = [...WEAPON_BASE_SLOTS, ...SLOT4_OPTIONS].find(w => w.shortName === wepLabel || w.name === wepLabel);
       if (m) return m.name;
       const cur = state.weapons[state.slot];
       if (cur && cur.type !== 'medkit' && cur.type !== 'grenade') return cur.name;
@@ -1476,7 +1646,7 @@ export function generateStandaloneHtml(): string {
         if (state.wepKills[k] > top) { top = state.wepKills[k]; best = k; }
       });
       if (best) return best;
-      const pref = WEAPON_TEMPLATES[profile.preferredSlot || 0];
+      const pref = buildFourSlotLoadout()[profile.preferredSlot || 0];
       return (pref && pref.type !== 'medkit' && pref.type !== 'grenade') ? pref.name : 'AR-X7 Tactical';
     }
 
@@ -1542,8 +1712,8 @@ export function generateStandaloneHtml(): string {
 
     function throwGrenade() {
       const w = state.weapons[state.slot];
-      if (w.type !== 'grenade' || w.currentAmmo <= 0) { state.shootCd = 0.25; return; }
-      w.currentAmmo--; state.shootCd = w.fireRate;
+      if (w.type !== 'grenade' || (!adminCheats.infiniteAmmo && w.currentAmmo <= 0)) { state.shootCd = 0.25; return; }
+      if (!adminCheats.infiniteAmmo) w.currentAmmo--; state.shootCd = w.fireRate;
       state.recoilPitch = 0.08; state.recoilZ = 0.06;
       AudioSys.grenadeThrow();
       const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
@@ -1666,13 +1836,13 @@ export function generateStandaloneHtml(): string {
       updateHUD();
     }
 
-    function startMatch() {
+    function startMatch(initWave = 1, autoLock = true) {
       AudioSys.stopLobbyAmbient();
       AudioSys.bossMusicStop();
       setBossAtmo(false);
       AudioSys.resume();
       closeModals();
-      state.inMenu = false; state.paused = false; state.invOpen = false; state.dead = false;
+      state.inMenu = false; state.paused = !autoLock; state.invOpen = false; state.dead = false;
       state.crouching = false; state.eyeH = 1.75; state.bannerT = 0;
       state.flashlight = false; tacticalLight.intensity = 0; state.flashGlare = 0; laserDot.visible = false;
       activeGrenades.forEach(g => scene.remove(g.mesh)); activeGrenades = [];
@@ -1681,15 +1851,18 @@ export function generateStandaloneHtml(): string {
       while (floatingDamages.length) { const fd = floatingDamages.pop(); scene.remove(fd.sprite); fd.tex.dispose(); fd.mat.dispose(); }
       const vp = document.getElementById('vamp-heal-pop'); if (vp) vp.classList.remove('active');
       state.sKills = 0; state.sHs = 0; state.sShots = 0; state.sHits = 0; state.sXp = 0; state.survT = 0; state.submitted = false; state.subRank = null;
-      state.weapons = JSON.parse(JSON.stringify(WEAPON_TEMPLATES));
+      state.weapons = buildFourSlotLoadout();
+      state.prevSlot = 3;
       playerPos.set(0, 1.75, 31); playerVel.set(0,0,0); euler.set(0,0,0,'YXZ');
       camera.position.copy(playerPos); camera.quaternion.setFromEuler(euler);
       weaponRig.visible = true;
-      equipSlot(profile.preferredSlot || 0, true);
-      spawnWave(1);
+      const startSlot = (profile.slot4Choice === 'nano_medkit' && profile.preferredSlot === 3) ? 0 : Math.min(3, Math.max(0, profile.preferredSlot || 0));
+      equipSlot(startSlot, true);
+      spawnWave(initWave);
       document.getElementById('main-menu').style.display = 'none';
       document.getElementById('hud').style.display = 'block';
-      document.body.requestPointerLock();
+      if (autoLock) requestPointerLockSafe();
+      else { syncGraphicsUI(); document.getElementById('modal-pause').style.display = 'flex'; }
     }
 
     function triggerShoot() {
@@ -1697,9 +1870,11 @@ export function generateStandaloneHtml(): string {
       const w = state.weapons[state.slot];
       if (w.type === 'medkit') { useMedkit(); state.shootCd = 0.6; return; }
       if (w.type === 'grenade') { throwGrenade(); return; }
-      if (w.currentAmmo <= 0) { state.shootCd = 0.25; return; }
+      if (!adminCheats.infiniteAmmo && w.currentAmmo <= 0) { state.shootCd = 0.25; return; }
 
-      w.currentAmmo--; state.shootCd = w.fireRate; state.boltKick = 1.0;
+      if (adminCheats.infiniteAmmo) w.currentAmmo = w.magSize;
+      else w.currentAmmo--;
+      state.shootCd = w.fireRate; state.boltKick = 1.0;
       const sf = w.pellets || 1; profile.totalShots += sf; state.sShots += sf;
 
       if (w.type === 'shotgun') { AudioSys.shotgun(); state.recoilPitch = 0.16; state.recoilZ = 0.13; state.pumpAnim = 1.0; shakeInt = Math.max(shakeInt, 0.065); }
@@ -1802,16 +1977,55 @@ export function generateStandaloneHtml(): string {
       }
       dmgMap.forEach(e => spawnDamageNumber(e.pos, e.dmg, e.isCrit));
       if (hits > 0) { profile.totalHits += hits; state.sHits += hits; }
-      if (w.currentAmmo === 0 && w.reserveAmmo > 0 && !state.reloading) {
+      if (!adminCheats.infiniteAmmo && w.currentAmmo === 0 && w.reserveAmmo > 0 && !state.reloading) {
         state.reloading = true; state.reloadT = 0; state.scoped = false;
         AudioSys.reload(w.reloadTime);
       }
       saveProfile(); updateHUD();
     }
 
+    let pauseLockTimer = null;
+    function showPauseLockNotice(msg) {
+      if (pauseLockTimer) { clearTimeout(pauseLockTimer); pauseLockTimer = null; }
+      const el = document.getElementById('pause-lock-note');
+      if (!el) return;
+      el.textContent = msg || '';
+      el.style.display = msg ? 'block' : 'none';
+      if (msg) {
+        pauseLockTimer = setTimeout(() => {
+          pauseLockTimer = null;
+          el.style.display = 'none';
+        }, 3000);
+      }
+    }
+    function handlePointerLockFail(err) {
+      if (state.inMenu || state.dead) return;
+      const msg = err && err.message ? err.message : '';
+      const isCooldown = /exited|cooldown|immediately|security/i.test(msg);
+      state.invOpen = false;
+      state.paused = true;
+      syncGraphicsUI();
+      showPauseLockNotice(isCooldown ? 'Pointer lock cooling down — wait 1s and click Resume.' : 'Click Resume to lock mouse aim.');
+      document.getElementById('modal-inventory').style.display = 'none';
+      document.getElementById('modal-pause').style.display = 'flex';
+    }
+    function requestPointerLockSafe() {
+      if (document.pointerLockElement === document.body) { showPauseLockNotice(''); return; }
+      try {
+        const p = document.body.requestPointerLock();
+        if (p && typeof p.catch === 'function') p.catch(handlePointerLockFail);
+      } catch (err) {
+        handlePointerLockFail(err);
+      }
+    }
+    document.addEventListener('pointerlockerror', () => {
+      handlePointerLockFail();
+    });
+
     // PointerLock, Wheel Swap & Keyboard Listeners
     document.addEventListener('pointerlockchange', () => {
       isLocked = document.pointerLockElement === document.body;
+      if (isLocked) showPauseLockNotice('');
       if (!state.inMenu && !state.dead && !state.invOpen) {
         state.paused = !isLocked;
         if (state.paused) syncGraphicsUI();
@@ -1846,21 +2060,23 @@ export function generateStandaloneHtml(): string {
       if (e.code === 'Tab' || e.code === 'KeyI') {
         e.preventDefault();
         state.invOpen = !state.invOpen;
-        if (state.invOpen) { document.exitPointerLock(); renderInventory(); document.getElementById('modal-inventory').style.display = 'flex'; }
-        else { document.getElementById('modal-inventory').style.display = 'none'; document.body.requestPointerLock(); }
+        if (state.invOpen) { if (document.pointerLockElement) document.exitPointerLock(); renderInventory(); document.getElementById('modal-inventory').style.display = 'flex'; }
+        else { document.getElementById('modal-inventory').style.display = 'none'; requestPointerLockSafe(); }
         return;
       }
       if (!isLocked) return;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { state.crouching = false; }
       if (e.code === 'KeyC' && !e.repeat) { state.crouching = !state.crouching; }
       if (e.code === 'ControlLeft' || e.code === 'ControlRight') { state.crouching = true; }
-      if (e.code === 'Space' && grounded) { state.crouching = false; playerVel.y = 7.6; grounded = false; }
+      if (e.code === 'Space' && grounded) { state.crouching = false; playerVel.y = 7.6 * adminCheats.jumpMult; grounded = false; }
       if (e.code === 'KeyF' && !e.repeat) { toggleFlashlight(); }
       if (e.code === 'KeyQ' && !e.repeat) { equipSlot(state.prevSlot); }
       if (e.code === 'KeyG' && !e.repeat && waveWait > 0) { waveWait = 0; spawnWave(state.wave + 1); }
       if (e.code === 'KeyR' && state.swapPhase !== 'unequip') {
         const w = state.weapons[state.slot];
-        if (!state.reloading && w.type !== 'medkit' && w.type !== 'grenade' && w.currentAmmo < w.magSize && w.reserveAmmo > 0) {
+        if (adminCheats.infiniteAmmo && w.type !== 'medkit' && w.type !== 'grenade') {
+          w.currentAmmo = w.magSize; state.reloading = false; updateHUD();
+        } else if (!state.reloading && w.type !== 'medkit' && w.type !== 'grenade' && w.currentAmmo < w.magSize && w.reserveAmmo > 0) {
           state.reloading = true; state.reloadT = 0; state.scoped = false; AudioSys.reload(w.reloadTime); updateHUD();
         }
       }
@@ -1868,9 +2084,6 @@ export function generateStandaloneHtml(): string {
       if (e.code === 'Digit2') equipSlot(1);
       if (e.code === 'Digit3') equipSlot(2);
       if (e.code === 'Digit4') equipSlot(3);
-      if (e.code === 'Digit5') equipSlot(4);
-      if (e.code === 'Digit6') equipSlot(5);
-      if (e.code === 'Digit7') equipSlot(6);
     });
     window.addEventListener('keyup', e => {
       keys[e.code] = false;
@@ -2008,15 +2221,20 @@ export function generateStandaloneHtml(): string {
     const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.148,16,14), opArmor); helmet.position.y = 0.18; helmet.castShadow = true; opHead.add(helmet);
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.21,0.068,0.11), opVisorMat); visor.position.set(0,0.195,0.108); opHead.add(visor);
     const opWeaponMount = new THREE.Group(); opWeaponMount.position.set(-0.04, 0.23, 0.34); opWeaponMount.rotation.set(0.14, -0.78, 0.08); opWeaponMount.scale.setScalar(1.08); opTorso.add(opWeaponMount);
-    const opWeapons = [buildARX7(), buildVectorV9(), buildSG12(), buildSR50(), buildDesertPython(), buildFlashFrag(), buildMedkit()];
-    opWeapons[4].scale.setScalar(1.22);
-    opWeapons[5].rotation.x = Math.PI/2; opWeapons[5].scale.setScalar(1.25);
-    opWeapons[6].rotation.x = Math.PI/2;
+    const opWeapons = [buildARX7(), buildSG12(), buildSR50(), buildDesertPython(), buildMedkit()];
+    const opWeaponsById = { ar_x7: opWeapons[0], sg_12: opWeapons[1], sr_50: opWeapons[2], desert_python: opWeapons[3], nano_medkit: opWeapons[4] };
+    opWeapons[3].scale.setScalar(1.22);
+    opWeapons[4].rotation.x = Math.PI/2;
     opWeapons.forEach(w => {
       const lb = w.getObjectByName('laserBeam'); if (lb) lb.visible = false;
       w.visible = false; opWeaponMount.add(w);
     });
-    function setLobbyWeapon(idx) { opWeapons.forEach((w,i) => w.visible = i === idx); }
+    function setLobbyWeapon(idx) {
+      const loadout = buildFourSlotLoadout();
+      const target = loadout[idx] || loadout[0];
+      Object.values(opWeaponsById).forEach(w => w.visible = false);
+      if (opWeaponsById[target.id]) opWeaponsById[target.id].visible = true;
+    }
     function setLobbyAccent(hex) {
       const c = new THREE.Color(hex || '#06b6d4');
       opVisorMat.color.copy(c); opVisorMat.emissive.copy(c);
@@ -2304,13 +2522,34 @@ export function generateStandaloneHtml(): string {
       document.getElementById('scope-overlay').style.display = state.scoped ? 'flex' : 'none';
       document.getElementById('crosshair').style.display = state.scoped ? 'none' : 'block';
 
-      document.getElementById('slot-list').innerHTML = state.weapons.map((wp, i) =>
-        '<div class="slot-row ' + (i === state.slot ? 'active' : '') + '"><span>['+wp.slot+']</span><span style="flex:1">'+wp.shortName+'</span><span>'+((wp.type==='medkit'||wp.type==='grenade')?'x'+wp.currentAmmo:wp.currentAmmo)+'</span></div>'
-      ).join('');
+      function slotMiniSvg(t, act) {
+        const c = act ? '#67e8f9' : '#64748b';
+        if (t === 'shotgun') return '<svg width="26" height="12" viewBox="0 0 28 12" fill="none" style="flex-shrink:0;"><path d="M2 5h19v2.2H9l-3 3.3H2V5zm21 0h3v2.2h-3V5zm-12 2.4h6.5v1.6H11V7.4z" fill="'+c+'"/></svg>';
+        if (t === 'sniper') return '<svg width="28" height="12" viewBox="0 0 30 12" fill="none" style="flex-shrink:0;"><path d="M1 5.5h20v2H9l-3.5 3.3H1V5.5zm20 .4h8v1.2h-8V5.9zm-11-3.2h7v1.8h-7V2.7z" fill="'+c+'"/></svg>';
+        if (t === 'pistol') return '<svg width="20" height="12" viewBox="0 0 22 12" fill="none" style="flex-shrink:0;"><path d="M3 2.5h15v3.2H9.5L8 10.5H4.2l1.2-4.8H3V2.5z" fill="'+c+'"/></svg>';
+        if (t === 'medkit') return '<svg width="16" height="14" viewBox="0 0 18 14" fill="none" style="flex-shrink:0;"><rect x="2" y="2.5" width="14" height="9.5" rx="2" stroke="'+c+'" stroke-width="1.5"/><path d="M9 4.8v4.8M6.6 7.2h4.8" stroke="#34d399" stroke-width="1.6" stroke-linecap="round"/></svg>';
+        return '<svg width="26" height="12" viewBox="0 0 28 12" fill="none" style="flex-shrink:0;"><path d="M2 4.5h18v2.5H13l-1.5 3.5H9L10 7H6L4 10H1.5l1-5.5zm19 .5h5v1.5h-5V5zm-11-2h6v1.2h-6V3z" fill="'+c+'"/></svg>';
+      }
+      document.getElementById('slot-list').innerHTML = state.weapons.slice(0, 4).map((wp, i) => {
+        const act = i === state.slot;
+        const isIt = wp.type === 'medkit' || wp.type === 'grenade';
+        const ammoStr = isIt ? ('x' + wp.currentAmmo) : (wp.currentAmmo + '<span style="color:'+(act?'#a5f3fc':'#64748b')+';">/' + Math.max(0, wp.reserveAmmo) + '</span>');
+        const emptyCol = (wp.currentAmmo === 0 && !isIt) ? '#fb7185' : (act ? '#ffffff' : '#cbd5e1');
+        return '<div class="slot-row ' + (act ? 'active' : '') + '"><span class="slot-key font-mono">'+wp.slot+'</span>'+slotMiniSvg(wp.type, act)+'<span style="flex:1;font-weight:700;letter-spacing:0.02em;white-space:nowrap;">'+wp.shortName+'</span><span class="font-mono" style="font-weight:700;font-variant-numeric:tabular-nums;color:'+emptyCol+';">'+ammoStr+'</span></div>';
+      }).join('');
 
       document.getElementById('killfeed').innerHTML = state.killFeed.map(k =>
         '<div class="kf-item ' + (k.hs ? 'hs' : '') + '">' + k.text + '</div>'
       ).join('');
+      const cb = document.getElementById('hud-cheat-bar');
+      if (cb) {
+        const parts = [];
+        if (adminCheats.godMode) parts.push('<strong style="color:#34d399;">GOD MODE</strong>');
+        if (adminCheats.infiniteAmmo) parts.push('<strong style="color:#22d3ee;">INF AMMO</strong>');
+        if (adminCheats.speedMult > 1.01 || adminCheats.jumpMult > 1.01) parts.push('<span>SPD ' + adminCheats.speedMult.toFixed(1) + 'x · JMP ' + adminCheats.jumpMult.toFixed(1) + 'x</span>');
+        cb.style.display = parts.length ? 'flex' : 'none';
+        cb.innerHTML = parts.join(' <span style="color:#475569;">·</span> ');
+      }
     }
 
     function drawRadar() {
@@ -2338,21 +2577,40 @@ export function generateStandaloneHtml(): string {
       ctx.restore();
     }
 
-    let armorySel = profile.preferredSlot || 0;
+    let armorySel = Math.min(3, Math.max(0, profile.preferredSlot || 0));
     function renderArmory() {
-      document.getElementById('armory-grid').innerHTML = WEAPON_TEMPLATES.map((w, i) =>
+      const loadout = buildFourSlotLoadout();
+      armorySel = Math.min(3, Math.max(0, armorySel));
+      document.getElementById('armory-grid').innerHTML = loadout.map((w, i) =>
         '<button onclick="selectArmory('+i+')" class="btn-sec" style="text-align:left;padding:8px 10px;'+(armorySel===i?'border-color:#22d3ee;background:rgba(6,182,212,0.15);':'')+'"><div class="font-mono" style="font-size:10px;color:#94a3b8;">SLOT '+w.slot+(profile.preferredSlot===i?' · PRIMARY':'')+'</div><div class="font-display" style="font-size:13px;margin-top:2px;">'+w.shortName+'</div></button>'
       ).join('');
-      const cw = WEAPON_TEMPLATES[armorySel];
+      const s4c = profile.slot4Choice === 'nano_medkit' ? 'nano_medkit' : 'desert_python';
+      document.getElementById('armory-slot4-bar').innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">' +
+          '<span class="font-mono" style="font-size:10px;color:#94a3b8;text-transform:uppercase;">Slot 4 Tactical Reserve</span>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<button onclick="setSlot4Choice(\\'desert_python\\')" class="btn-sec font-mono" style="padding:5px 10px;font-size:10px;'+(s4c==='desert_python'?'border-color:#22d3ee;background:rgba(6,182,212,0.18);color:#67e8f9;':'')+'">.50 PYTHON</button>' +
+            '<button onclick="setSlot4Choice(\\'nano_medkit\\')" class="btn-sec font-mono" style="padding:5px 10px;font-size:10px;'+(s4c==='nano_medkit'?'border-color:#10b981;background:rgba(16,185,129,0.18);color:#6ee7b7;':'')+'">MEDKIT</button>' +
+          '</div>' +
+        '</div>';
+      const cw = loadout[armorySel];
       const isUtil = cw.type === 'medkit' || cw.type === 'grenade';
       document.getElementById('armory-detail').innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><strong class="font-display" style="font-size:17px;">'+cw.name+'</strong><span class="font-mono" style="font-size:11px;color:#22d3ee;">'+cw.caliber+'</span></div><p style="font-size:12px;color:#94a3b8;margin-bottom:14px;">'+cw.desc+'</p>' +
-        (!isUtil ? '<button onclick="setPrimarySlot('+armorySel+')" class="btn-primary" style="font-size:13px;padding:10px;">Set Starting Weapon</button>' : '');
+        (!isUtil ? '<button onclick="setPrimarySlot('+armorySel+')" class="btn-primary" style="font-size:13px;padding:10px;">'+(profile.preferredSlot===armorySel?'Equipped as Starting Weapon':'Set Starting Weapon')+'</button>' : '<div class="font-mono" style="font-size:11px;color:#34d399;padding:8px;border:1px solid rgba(16,185,129,0.35);border-radius:8px;text-align:center;">Tactical Slot 4 Support Tool · Press [4] In Combat</div>');
     }
-    window.selectArmory = i => { armorySel = i; setLobbyWeapon(i); renderArmory(); };
-    window.setPrimarySlot = i => { profile.preferredSlot = i; saveProfile(); setLobbyWeapon(i); renderArmory(); };
+    window.selectArmory = i => { armorySel = Math.min(3, Math.max(0, i)); setLobbyWeapon(armorySel); renderArmory(); };
+    window.setPrimarySlot = i => { profile.preferredSlot = Math.min(3, Math.max(0, i)); saveProfile(); setLobbyWeapon(profile.preferredSlot); renderArmory(); };
+    window.setSlot4Choice = c => {
+      profile.slot4Choice = c === 'nano_medkit' ? 'nano_medkit' : 'desert_python';
+      if (profile.slot4Choice === 'nano_medkit' && profile.preferredSlot === 3) profile.preferredSlot = 0;
+      saveProfile();
+      armorySel = 3;
+      setLobbyWeapon(3);
+      renderArmory();
+    };
 
     function renderInventory() {
-      document.getElementById('inv-grid').innerHTML = state.weapons.map((w, i) =>
+      document.getElementById('inv-grid').innerHTML = state.weapons.slice(0, 4).map((w, i) =>
         '<div class="card" style="background:#0C1017;display:flex;flex-direction:column;justify-content:space-between;'+(state.slot===i?'border-color:#22d3ee;':'')+'"><div><div class="font-mono" style="font-size:11px;color:#94a3b8;">SLOT '+w.slot+'</div><h3 class="font-display" style="font-size:15px;margin:4px 0;">'+w.name+'</h3><p style="font-size:11px;color:#94a3b8;margin-bottom:10px;">'+w.desc+'</p></div>' +
         (w.type === 'medkit' ? '<button onclick="invUseMed()" class="btn-primary" style="background:#10b981;font-size:12px;padding:8px;">Use Medkit (x'+w.currentAmmo+')</button>' : '<button onclick="invEquip('+i+')" class="btn-primary" style="font-size:12px;padding:8px;">'+(state.slot===i?'Equipped':'Equip ['+w.slot+']')+'</button>') + '</div>'
       ).join('');
@@ -2649,10 +2907,10 @@ export function generateStandaloneHtml(): string {
       AudioSys.scoreSubmit(); saveProfile(); renderGameOver();
     }
 
-    document.getElementById('inv-close').onclick = () => { state.invOpen = false; closeModals(); document.body.requestPointerLock(); };
-    document.getElementById('btn-resume').onclick = () => { closeModals(); document.body.requestPointerLock(); };
-    document.getElementById('btn-restart').onclick = startMatch;
-    document.getElementById('btn-redeploy').onclick = startMatch;
+    document.getElementById('inv-close').onclick = () => { state.invOpen = false; closeModals(); requestPointerLockSafe(); };
+    document.getElementById('btn-resume').onclick = () => { closeModals(); requestPointerLockSafe(); };
+    document.getElementById('btn-restart').onclick = () => startMatch(1, true);
+    document.getElementById('btn-redeploy').onclick = () => startMatch(1, true);
     function goMainMenu() {
       AudioSys.bossMusicStop(); setBossAtmo(false); clearBossHazards();
       state.inMenu = true; state.paused = true; weaponRig.visible = false;
@@ -2662,6 +2920,224 @@ export function generateStandaloneHtml(): string {
     }
     document.getElementById('btn-tomenu').onclick = goMainMenu;
     document.getElementById('btn-go-menu').onclick = goMainMenu;
+
+    // Patch Notes Modal Handlers
+    function openPatchNotes() {
+      if (state.inMenu) { AudioSys.startLobbyAmbient(); document.getElementById('main-menu').style.display = 'none'; }
+      document.getElementById('modal-patchnotes').style.display = 'flex';
+    }
+    function closePatchNotes() {
+      document.getElementById('modal-patchnotes').style.display = 'none';
+      if (state.inMenu) closeModals();
+    }
+    document.getElementById('btn-patch-notes').onclick = openPatchNotes;
+    document.getElementById('pn-close-x').onclick = closePatchNotes;
+    document.getElementById('pn-close-btn').onclick = closePatchNotes;
+    document.getElementById('modal-patchnotes').onclick = e => { if (e.target.id === 'modal-patchnotes') closePatchNotes(); };
+
+    // Secret Admin Panel & PIN Gate Logic
+    let admLbTab = 'global', admLbQuery = '';
+    function setAdminNotice(msg) {
+      adminNotice = msg;
+      const el = document.getElementById('adm-notice');
+      if (el) el.innerText = msg;
+    }
+    function openAdminGate() {
+      if (!state.inMenu && !state.paused && !state.dead) {
+        state.paused = true; mouseDown = false; state.aiming = false; state.scoped = false;
+        if (document.pointerLockElement) document.exitPointerLock();
+        syncGraphicsUI();
+        document.getElementById('modal-pause').style.display = 'flex';
+      }
+      adminOpen = true;
+      if (adminUnlocked) {
+        document.getElementById('modal-admin-pin').style.display = 'none';
+        renderAdminConsole();
+        document.getElementById('modal-admin').style.display = 'flex';
+      } else {
+        document.getElementById('adm-pin-err').innerText = '';
+        document.getElementById('adm-pin-input').value = '';
+        document.getElementById('modal-admin-pin').style.display = 'flex';
+        setTimeout(() => document.getElementById('adm-pin-input').focus(), 40);
+      }
+    }
+    function closeAdminConsole() {
+      adminOpen = false;
+      document.getElementById('modal-admin-pin').style.display = 'none';
+      document.getElementById('modal-admin').style.display = 'none';
+    }
+    function renderAdminConsole() {
+      const sub = document.getElementById('adm-subtitle');
+      const hostCnt = enemies.filter(e => !e.isDead).length + (boss && !boss.isDead ? 1 : 0);
+      if (sub) sub.innerText = 'Operative: ' + profile.callsign + ' · Lvl ' + profile.level + ' · ' + (state.inMenu ? 'Hangar Lobby' : 'Wave ' + state.wave + ' (' + hostCnt + ' Hostiles)');
+      document.getElementById('adm-tabs').innerHTML = [['wave','Wave & Boss'],['cheats','Player Cheats'],['leaderboard','Leaderboard & Ban']].map(([id, lbl]) =>
+        '<button type="button" onclick="setAdmTab(\\'' + id + '\\')" class="adm-tab ' + (adminTab === id ? 'active' : '') + '">' + lbl + '</button>'
+      ).join('');
+      const body = document.getElementById('adm-body');
+      if (adminTab === 'wave') {
+        const disabledKill = (state.inMenu || state.dead) ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : '';
+        body.innerHTML =
+          '<div class="grid-3" style="margin-bottom:16px;">' +
+            '<button onclick="admSkipWave()" class="card" style="background:#0C1017;text-align:left;cursor:pointer;border-color:#334155;"><div class="font-display" style="font-size:14px;font-weight:700;color:#fff;margin-bottom:4px;">Skip Wave</div><div style="font-size:11px;color:#94a3b8;">Immediately jump to the next wave.</div></button>' +
+            '<button onclick="admSummonBoss()" class="card" style="background:#0C1017;text-align:left;cursor:pointer;border-color:rgba(244,63,94,0.5);"><div class="font-display" style="font-size:14px;font-weight:700;color:#fda4af;margin-bottom:4px;">Summon Boss (Wave 10)</div><div style="font-size:11px;color:#94a3b8;">Spawn The Specialist Anestesi anytime.</div></button>' +
+            '<button onclick="admKillAll()" ' + disabledKill + ' class="card" style="background:#0C1017;text-align:left;cursor:pointer;border-color:rgba(245,158,11,0.45);"><div class="font-display" style="font-size:14px;font-weight:700;color:#fcd34d;margin-bottom:4px;">Kill All Hostiles</div><div style="font-size:11px;color:#94a3b8;">Eliminate all living bots &amp; Boss on map.</div></button>' +
+          '</div>' +
+          '<div class="grid-4 font-mono">' +
+            '<div class="card" style="background:#0C1017;padding:10px;"><div style="font-size:10px;color:#94a3b8;">Wave</div><div style="font-size:17px;font-weight:700;color:#22d3ee;">' + (state.inMenu ? 'LOBBY' : 'W' + state.wave) + '</div></div>' +
+            '<div class="card" style="background:#0C1017;padding:10px;"><div style="font-size:10px;color:#94a3b8;">Hostiles</div><div style="font-size:17px;font-weight:700;">' + hostCnt + '</div></div>' +
+            '<div class="card" style="background:#0C1017;padding:10px;"><div style="font-size:10px;color:#94a3b8;">Boss</div><div style="font-size:17px;font-weight:700;color:#fb7185;">' + (boss && !boss.isDead ? 'ACTIVE' : 'STANDBY') + '</div></div>' +
+            '<div class="card" style="background:#0C1017;padding:10px;"><div style="font-size:10px;color:#94a3b8;">Score</div><div style="font-size:17px;font-weight:700;color:#34d399;">' + state.score.toLocaleString() + '</div></div>' +
+          '</div>';
+      } else if (adminTab === 'cheats') {
+        body.innerHTML =
+          '<div class="grid-2" style="margin-bottom:14px;">' +
+            '<button onclick="admToggleGod()" class="card" style="background:' + (adminCheats.godMode ? 'rgba(6,78,59,0.45)' : '#0C1017') + ';border-color:' + (adminCheats.godMode ? 'rgba(16,185,129,0.65)' : '#1e293b') + ';text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;"><div><div class="font-display" style="font-size:14px;font-weight:700;color:#fff;">God Mode (Invincible)</div><div style="font-size:11px;color:#94a3b8;">Zero HP &amp; Armor loss from attacks</div></div><strong class="font-mono" style="color:' + (adminCheats.godMode ? '#34d399' : '#64748b') + ';">' + (adminCheats.godMode ? 'ON' : 'OFF') + '</strong></button>' +
+            '<button onclick="admToggleInf()" class="card" style="background:' + (adminCheats.infiniteAmmo ? 'rgba(8,47,73,0.55)' : '#0C1017') + ';border-color:' + (adminCheats.infiniteAmmo ? 'rgba(6,182,212,0.65)' : '#1e293b') + ';text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;"><div><div class="font-display" style="font-size:14px;font-weight:700;color:#fff;">Infinite Ammo &amp; No Reload</div><div style="font-size:11px;color:#94a3b8;">Unlimited mags, grenades &amp; medkits</div></div><strong class="font-mono" style="color:' + (adminCheats.infiniteAmmo ? '#22d3ee' : '#64748b') + ';">' + (adminCheats.infiniteAmmo ? 'ON' : 'OFF') + '</strong></button>' +
+          '</div>' +
+          '<div class="card" style="background:#0C1017;margin-bottom:14px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><strong class="font-display" style="font-size:14px;">Speed &amp; Jump Multiplier</strong><button onclick="admResetMult()" class="btn-sec" style="padding:4px 10px;">Reset 1.0x</button></div>' +
+            '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;"><span>Movement Speed</span><strong id="adm-spd-v" class="font-mono" style="color:#fbbf24;">' + adminCheats.speedMult.toFixed(1) + 'x</strong></div>' +
+            '<input type="range" min="1.0" max="3.0" step="0.1" value="' + adminCheats.speedMult + '" oninput="admSetSpd(this.value)" style="margin-bottom:10px;"/>' +
+            '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;"><span>Jump Height</span><strong id="adm-jmp-v" class="font-mono" style="color:#22d3ee;">' + adminCheats.jumpMult.toFixed(1) + 'x</strong></div>' +
+            '<input type="range" min="1.0" max="2.5" step="0.1" value="' + adminCheats.jumpMult + '" oninput="admSetJmp(this.value)"/>' +
+          '</div>' +
+          '<div class="card" style="background:#0C1017;border-color:rgba(245,158,11,0.4);display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;">' +
+            '<div><div class="font-display" style="font-size:14px;font-weight:700;color:#fff;">Max XP &amp; Unlock All</div><div class="font-mono" style="font-size:11px;color:#94a3b8;">Lvl ' + profile.level + ' (' + profile.xp.toLocaleString() + ' XP) · ' + (profile.allUnlocked ? 'All Unlocked' : 'Standard') + '</div></div>' +
+            '<button onclick="admGrantMaxXp()" class="btn-primary" style="width:auto;background:#f59e0b;font-size:12px;padding:10px 16px;">+50,000 XP &amp; Unlock All</button>' +
+          '</div>';
+      } else {
+        const brd = getMergedLb(admLbTab);
+        const q = admLbQuery.trim().toUpperCase();
+        const rows = (q ? brd.rows.filter(r => r.callsign.toUpperCase().includes(q)) : brd.rows).slice(0, 40);
+        const banned = loadBanned();
+        body.innerHTML =
+          '<form onsubmit="admAddScore(event)" class="card" style="background:#0C1017;margin-bottom:12px;">' +
+            '<div class="font-display" style="font-size:13px;font-weight:700;margin-bottom:8px;">Add / Edit Custom Score</div>' +
+            '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;">' +
+              '<div><div style="font-size:10px;color:#94a3b8;margin-bottom:3px;">Callsign</div><input id="adm-cs-in" type="text" maxlength="16" value="' + profile.callsign + '" style="padding:7px 10px;font-size:12px;"/></div>' +
+              '<div><div style="font-size:10px;color:#94a3b8;margin-bottom:3px;">Score</div><input id="adm-sc-in" type="number" min="0" value="25000" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid #334155;background:#0C1017;color:#fcd34d;font-size:12px;"/></div>' +
+              '<div><div style="font-size:10px;color:#94a3b8;margin-bottom:3px;">Wave</div><input id="adm-wv-in" type="number" min="1" max="99" value="10" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid #334155;background:#0C1017;color:#fff;font-size:12px;"/></div>' +
+              '<div><div style="font-size:10px;color:#94a3b8;margin-bottom:3px;">Kills</div><input id="adm-kl-in" type="number" min="0" value="64" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid #334155;background:#0C1017;color:#fff;font-size:12px;"/></div>' +
+              '<div><div style="font-size:10px;color:#94a3b8;margin-bottom:3px;">Acc%</div><input id="adm-ac-in" type="number" min="0" max="100" value="78" style="width:100%;padding:7px 8px;border-radius:8px;border:1px solid #334155;background:#0C1017;color:#34d399;font-size:12px;"/></div>' +
+              '<button type="submit" class="btn-primary" style="width:auto;font-size:12px;padding:8px 14px;">Save</button>' +
+            '</div>' +
+          '</form>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">' +
+            '<div class="lb-tabs">' + ['global','weekly','personal'].map(t => '<button type="button" onclick="setAdmLbTab(\\'' + t + '\\')" class="lb-tab ' + (admLbTab === t ? 'active' : '') + '" style="text-transform:capitalize;">' + t + '</button>').join('') + '</div>' +
+            '<input type="text" placeholder="Search callsign..." value="' + admLbQuery + '" oninput="setAdmLbQ(this.value)" style="max-width:210px;padding:7px 10px;font-size:12px;"/>' +
+          '</div>' +
+          '<div class="card" style="background:#0C1017;padding:0;overflow:hidden;margin-bottom:12px;"><div style="max-height:220px;overflow-y:auto;">' +
+            '<table class="lb-table font-mono"><thead><tr><th>Rank</th><th>Callsign</th><th style="text-align:right;">Wave</th><th style="text-align:right;">Score</th><th style="text-align:right;">Action</th></tr></thead><tbody>' +
+            (rows.length === 0 ? '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:24px;">No entries found.</td></tr>' :
+              rows.map(r => '<tr><td style="color:#94a3b8;">#' + r.rank + '</td><td>' + r.flag + ' <strong>' + r.callsign + '</strong></td><td style="text-align:right;">W' + r.wave + '</td><td style="text-align:right;color:#fbbf24;font-weight:700;">' + r.score.toLocaleString() + '</td><td style="text-align:right;"><button onclick="admBanEntry(\\'' + r.id + '\\',\\'' + r.callsign.replace(/'/g,'') + '\\')" class="btn-sec" style="padding:4px 8px;font-size:11px;color:#fda4af;border-color:rgba(244,63,94,0.45);">Ban / Remove</button></td></tr>').join('')) +
+            '</tbody></table></div></div>' +
+          (banned.length > 0 ? '<div class="card" style="background:#0C1017;"><div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span class="font-mono" style="font-size:11px;color:#fb7185;font-weight:700;">BANNED CALLSIGNS (' + banned.length + ')</span><button onclick="admClearBans()" class="btn-sec" style="padding:3px 10px;font-size:11px;">Restore All</button></div><div style="display:flex;flex-wrap:wrap;gap:6px;">' + banned.map(b => '<button onclick="admUnban(\\'' + b + '\\')" class="btn-sec" style="padding:4px 10px;font-size:11px;">' + b + ' · Unban</button>').join('') + '</div></div>' : '');
+      }
+    }
+    window.setAdmTab = t => { adminTab = t; renderAdminConsole(); };
+    window.setAdmLbTab = t => { admLbTab = t; renderAdminConsole(); };
+    window.setAdmLbQ = v => { admLbQuery = v; renderAdminConsole(); };
+    window.admSkipWave = () => {
+      if (state.inMenu) { startMatch(2, false); setAdminNotice('Deployed to Wave 2.'); }
+      else if (!state.dead) { waveWait = 0; spawnWave(state.wave + 1); setAdminNotice('Skipped to Wave ' + state.wave + '.'); }
+      renderAdminConsole();
+    };
+    window.admSummonBoss = () => {
+      if (state.inMenu) startMatch(10, false);
+      else if (!state.dead) { waveWait = 0; spawnWave(10); }
+      setAdminNotice('Boss The Specialist Anestesi summoned.');
+      renderAdminConsole();
+    };
+    window.admKillAll = () => {
+      if (state.inMenu || state.dead) return 0;
+      let cnt = 0;
+      enemies.filter(b => !b.isDead).forEach(b => { cnt++; eliminateBot(b, true, 'ADMIN-CMD'); });
+      if (boss && !boss.isDead) { cnt++; eliminateBoss('ADMIN-CMD', 'weakspot'); }
+      updateHUD(); setAdminNotice('Eliminated ' + cnt + ' hostile(s).'); renderAdminConsole();
+      return cnt;
+    };
+    window.nextWave = w => {
+      if (typeof w === 'number' && isFinite(w) && w >= 1) {
+        if (state.inMenu) startMatch(Math.floor(w), false);
+        else if (!state.dead) { waveWait = 0; spawnWave(Math.floor(w)); }
+      } else {
+        window.admSkipWave();
+      }
+    };
+    window.summonBoss = () => window.admSummonBoss();
+    window.killAllHostiles = () => window.admKillAll();
+    window.admToggleGod = () => {
+      adminCheats.godMode = !adminCheats.godMode;
+      if (adminCheats.godMode) { state.hp = 100; state.ap = 100; }
+      updateHUD(); setAdminNotice('God Mode ' + (adminCheats.godMode ? 'ENABLED' : 'DISABLED')); renderAdminConsole();
+    };
+    window.admToggleInf = () => {
+      adminCheats.infiniteAmmo = !adminCheats.infiniteAmmo;
+      if (adminCheats.infiniteAmmo) { state.reloading = false; state.weapons.forEach(w => { w.currentAmmo = w.type==='medkit'||w.type==='grenade' ? w.maxReserve : w.magSize; if (w.maxReserve) w.reserveAmmo = w.maxReserve; }); }
+      updateHUD(); setAdminNotice('Infinite Ammo ' + (adminCheats.infiniteAmmo ? 'ENABLED' : 'DISABLED')); renderAdminConsole();
+    };
+    window.admSetSpd = v => { adminCheats.speedMult = parseFloat(v); const el = document.getElementById('adm-spd-v'); if (el) el.innerText = adminCheats.speedMult.toFixed(1) + 'x'; updateHUD(); };
+    window.admSetJmp = v => { adminCheats.jumpMult = parseFloat(v); const el = document.getElementById('adm-jmp-v'); if (el) el.innerText = adminCheats.jumpMult.toFixed(1) + 'x'; updateHUD(); };
+    window.admResetMult = () => { adminCheats.speedMult = 1.0; adminCheats.jumpMult = 1.0; updateHUD(); setAdminNotice('Multipliers reset to 1.0x'); renderAdminConsole(); };
+    window.admGrantMaxXp = () => {
+      profile.xp += 50000; state.sXp += 50000;
+      while (profile.xp >= profile.level * 250) { profile.xp -= profile.level * 250; profile.level++; }
+      profile.allUnlocked = true;
+      ['SPECIALIST_SLAYER','ARSENAL_MASTER','ADMIN_OVERDRIVE'].forEach(a => { if (!profile.achievements.includes(a)) profile.achievements.push(a); });
+      state.weapons.forEach(w => { w.currentAmmo = w.type==='medkit'||w.type==='grenade' ? w.maxReserve : w.magSize; if (w.maxReserve) w.reserveAmmo = w.maxReserve; });
+      saveProfile(); updateHUD(); setAdminNotice('+50,000 XP granted & all unlocked.'); renderAdminConsole();
+    };
+    window.admBanEntry = (id, cs) => { banOrRemoveEntry(id, cs); setAdminNotice('Banned & removed ' + cs); renderAdminConsole(); };
+    window.admUnban = cs => { unbanEntryCallsign(cs); setAdminNotice('Unbanned ' + cs); renderAdminConsole(); };
+    window.admClearBans = () => { clearAllBans(); setAdminNotice('Restored all entries.'); renderAdminConsole(); };
+    window.admAddScore = e => {
+      e.preventDefault();
+      const rec = addCustomLbScore(document.getElementById('adm-cs-in').value, Number(document.getElementById('adm-sc-in').value)||0, Number(document.getElementById('adm-wv-in').value)||1, Number(document.getElementById('adm-kl-in').value)||0, Number(document.getElementById('adm-ac-in').value)||0);
+      setAdminNotice('Saved custom score for ' + rec.callsign); renderAdminConsole();
+    };
+
+    document.getElementById('btn-menu-admin').onclick = openAdminGate;
+    document.getElementById('btn-pause-admin').onclick = openAdminGate;
+    document.getElementById('adm-pin-close-x').onclick = closeAdminConsole;
+    document.getElementById('adm-pin-cancel').onclick = closeAdminConsole;
+    document.getElementById('adm-close-x').onclick = closeAdminConsole;
+    document.getElementById('adm-lock-btn').onclick = () => { adminUnlocked = false; closeAdminConsole(); openAdminGate(); };
+    document.getElementById('modal-admin-pin').onclick = e => { if (e.target.id === 'modal-admin-pin') closeAdminConsole(); };
+    document.getElementById('modal-admin').onclick = e => { if (e.target.id === 'modal-admin') closeAdminConsole(); };
+    document.getElementById('adm-pin-form').onsubmit = e => {
+      e.preventDefault();
+      const inp = document.getElementById('adm-pin-input');
+      if ((inp.value || '').trim() === ADMIN_PIN) {
+        adminUnlocked = true; inp.value = '';
+        document.getElementById('modal-admin-pin').style.display = 'none';
+        renderAdminConsole();
+        document.getElementById('modal-admin').style.display = 'flex';
+      } else {
+        document.getElementById('adm-pin-err').innerText = 'Invalid Admin PIN. Access denied.';
+        inp.value = '';
+      }
+    };
+
+    let adminKeyBuf = '';
+    window.addEventListener('keydown', e => {
+      const t = e.target;
+      const inInput = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+      if (e.shiftKey && e.key === 'F12') {
+        e.preventDefault();
+        if (adminOpen) closeAdminConsole(); else openAdminGate();
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (adminOpen) { closeAdminConsole(); return; }
+        if (document.getElementById('modal-patchnotes').style.display === 'flex') { closePatchNotes(); return; }
+      }
+      if (inInput) return;
+      if ((state.inMenu || state.paused) && e.key && e.key.length === 1 && /^[a-zA-Z]$/.test(e.key)) {
+        adminKeyBuf = (adminKeyBuf + e.key.toLowerCase()).slice(-8);
+        if (adminKeyBuf === 'gisadmin') { adminKeyBuf = ''; openAdminGate(); }
+      } else if (e.key && e.key.length === 1) adminKeyBuf = '';
+    }, true);
+
     refreshMenuUI();
 
     // =========================================================================
@@ -2671,7 +3147,7 @@ export function generateStandaloneHtml(): string {
     const rcLOS = new THREE.Raycaster();
 
     function hurtStandalonePlayer(dmgAmt) {
-      if (state.dead) return;
+      if (state.dead || adminCheats.godMode) return;
       AudioSys.hurt(); state.dmgVignette = 0.8;
       let dmg = dmgAmt;
       if (state.ap > 0) { const ab = Math.min(state.ap, dmg*0.65); state.ap -= ab; dmg -= ab; }
@@ -2756,6 +3232,7 @@ export function generateStandaloneHtml(): string {
         const sprint = keys['ShiftLeft'] && keys['KeyW'] && !state.aiming && !state.crouching;
         let spd = state.aiming ? 3.1 : state.crouching ? 3.35 : sprint ? 8.6 : 5.6;
         if (state.slowT > 0) { state.slowT = Math.max(0, state.slowT - dt); spd *= 0.62; }
+        spd *= adminCheats.speedMult;
         if (waveWait > 0 && state.hp < 100) state.hp = Math.min(100, state.hp + 2.5 * dt);
         const prevEye = state.eyeH;
         state.eyeH = THREE.MathUtils.lerp(state.eyeH, state.crouching ? 1.12 : 1.75, Math.min(1, dt * 14));

@@ -16,7 +16,10 @@ import { EnemyBot } from './enemy';
 import { BossHitZone, BossSpecialist } from './boss';
 import {
   WeaponDef,
+  Slot4Choice,
+  SLOT4_OPTIONS,
   INITIAL_WEAPONS,
+  buildFourSlotLoadout,
   createARX7ViewModel,
   createVectorV9ViewModel,
   createSG12ViewModel,
@@ -89,6 +92,8 @@ export interface GameState {
     label: string;
   } | null;
   fps: number;
+  pointerLockNotice: string | null;
+  adminCheats: AdminCheatsState;
   radarData: {
     playerX: number;
     playerZ: number;
@@ -96,6 +101,13 @@ export interface GameState {
     enemies: { x: number; z: number; isDead: boolean; isBoss?: boolean }[];
     rects: RadarRect[];
   };
+}
+
+export interface AdminCheatsState {
+  godMode: boolean;
+  infiniteAmmo: boolean;
+  speedMultiplier: number;
+  jumpMultiplier: number;
 }
 
 export type GraphicsPreset = 'high' | 'medium' | 'potato';
@@ -142,10 +154,12 @@ export interface PlayerProfileData {
   masterVolume: number;
   accentColor: string;
   preferredSlot: number;
+  slot4Choice: Slot4Choice;
   crosshair: CrosshairConfig;
   graphicsPreset: GraphicsPreset;
   achievements: string[];
   bossDefeatedCount: number;
+  allUnlocked?: boolean;
 }
 
 export const DEFAULT_PROFILE: PlayerProfileData = {
@@ -164,10 +178,12 @@ export const DEFAULT_PROFILE: PlayerProfileData = {
   masterVolume: 0.7,
   accentColor: '#06b6d4',
   preferredSlot: 0,
+  slot4Choice: 'desert_python',
   crosshair: { ...DEFAULT_CROSSHAIR },
   graphicsPreset: 'high',
   achievements: [],
   bossDefeatedCount: 0,
+  allUnlocked: false,
 };
 
 export function getRankTitle(level: number): string {
@@ -187,6 +203,7 @@ export class GameEngine {
   private scenePmremTex: THREE.Texture | null = null;
   private camera: THREE.PerspectiveCamera;
   private controls: PointerLockControls;
+  private pointerLockNoticeTimer: number | null = null;
   private clock: THREE.Clock;
 
   // Lighting & Material Optimization Pools
@@ -251,7 +268,7 @@ export class GameEngine {
   private shootCooldown = 0;
   private isMouseDown = false;
 
-  private previousWeaponIndex = 4; // defaults to .50 Desert Python quick-switch
+  private previousWeaponIndex = 3; // defaults to Slot 4 quick-switch
   private swapPhase: 'idle' | 'unequip' | 'equip' = 'idle';
   private pendingWeaponIndex = 0;
   private swapTimer = 0;
@@ -384,8 +401,7 @@ export class GameEngine {
     this.camera.lookAt(0, 2, 0);
     this.scene.add(this.camera);
 
-    this.controls = new PointerLockControls(this.camera, this.renderer.domElement);
-    this.controls.pointerSpeed = this.profile.mouseSensitivity;
+    this.controls = this.createPointerLockControls();
 
     // 5. Balanced 3-Point Cyber-Night Lighting + Potato Mode Ambient Fallback
     this.arenaAmbientLight = new THREE.AmbientLight(0xdbeafe, 1.35);
@@ -460,8 +476,13 @@ export class GameEngine {
       container.clientWidth / container.clientHeight,
       maxAniso,
       this.profile.accentColor,
-      this.profile.preferredSlot || 0
+      Math.min(3, Math.max(0, this.profile.preferredSlot || 0))
     );
+    const initialLoadout = buildFourSlotLoadout(this.profile.slot4Choice);
+    const startWep = initialLoadout[this.profile.preferredSlot] || initialLoadout[0];
+    if (startWep) {
+      this.lobby.setWeaponById(startWep.id);
+    }
 
     this.particles = new ParticleSystem(this.scene);
 
@@ -540,8 +561,8 @@ export class GameEngine {
       isPaused: true,
       isInMenu: true,
       isInventoryOpen: false,
-      activeWeaponIndex: this.profile.preferredSlot || 0,
-      weapons: JSON.parse(JSON.stringify(INITIAL_WEAPONS)),
+      activeWeaponIndex: Math.min(3, Math.max(0, this.profile.preferredSlot || 0)),
+      weapons: buildFourSlotLoadout(this.profile.slot4Choice),
       isReloading: false,
       isAiming: false,
       isScoped: false,
@@ -569,6 +590,13 @@ export class GameEngine {
       bossBanner: null,
       vampireHealEvent: null,
       fps: 60,
+      pointerLockNotice: null,
+      adminCheats: {
+        godMode: false,
+        infiniteAmmo: false,
+        speedMultiplier: 1.0,
+        jumpMultiplier: 1.0,
+      },
       radarData: {
         playerX: 0,
         playerZ: 0,
@@ -610,9 +638,20 @@ export class GameEngine {
           parsed.graphicsPreset === 'high'
             ? parsed.graphicsPreset
             : savedPreset || DEFAULT_PROFILE.graphicsPreset;
+        const slot4Choice: Slot4Choice =
+          parsed.slot4Choice === 'nano_medkit' ? 'nano_medkit' : 'desert_python';
+        let preferredSlot =
+          typeof parsed.preferredSlot === 'number'
+            ? Math.max(0, Math.min(3, Math.floor(parsed.preferredSlot)))
+            : 0;
+        if (slot4Choice === 'nano_medkit' && preferredSlot === 3) {
+          preferredSlot = 0;
+        }
         return {
           ...DEFAULT_PROFILE,
           ...parsed,
+          preferredSlot,
+          slot4Choice,
           crosshair: { ...DEFAULT_CROSSHAIR, ...(parsed.crosshair || {}) },
           graphicsPreset: parsedPreset,
           achievements: Array.isArray(parsed.achievements) ? parsed.achievements : [],
@@ -652,8 +691,19 @@ export class GameEngine {
       if (updates.accentColor !== undefined) {
         this.lobby.setAccentColor(this.profile.accentColor);
       }
-      if (updates.preferredSlot !== undefined) {
-        this.lobby.setWeapon(this.profile.preferredSlot);
+      if (updates.preferredSlot !== undefined || updates.slot4Choice !== undefined) {
+        if (this.profile.slot4Choice === 'nano_medkit' && this.profile.preferredSlot === 3) {
+          this.profile.preferredSlot = 0;
+        } else {
+          this.profile.preferredSlot = Math.max(0, Math.min(3, this.profile.preferredSlot || 0));
+        }
+        const loadout = buildFourSlotLoadout(this.profile.slot4Choice);
+        const w = loadout[this.profile.preferredSlot] || loadout[0];
+        this.lobby.setWeaponById(w.id);
+        if (this.state.isInMenu) {
+          this.state.weapons = loadout;
+          this.state.activeWeaponIndex = this.profile.preferredSlot;
+        }
       }
       if (updates.graphicsPreset !== undefined) {
         this.applyGraphicsPreset(this.profile.graphicsPreset);
@@ -748,10 +798,7 @@ export class GameEngine {
     this.renderer.domElement.addEventListener('pointerdown', this.onLobbyPointerDown);
     this.renderer.domElement.addEventListener('wheel', this.onLobbyWheel, { passive: true });
 
-    this.controls = new PointerLockControls(this.camera, this.renderer.domElement);
-    this.controls.pointerSpeed = this.profile.mouseSensitivity;
-    this.controls.addEventListener('lock', this.onControlsLock);
-    this.controls.addEventListener('unlock', this.onControlsUnlock);
+    this.controls = this.createPointerLockControls();
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scenePmremTex?.dispose();
@@ -818,8 +865,12 @@ export class GameEngine {
     this.lobby.setFocusMode(mode);
   }
 
-  public previewLobbyWeapon(slotIndex: number) {
-    this.lobby.setWeapon(slotIndex);
+  public previewLobbyWeapon(slotIndex: number, overrideSlot4?: Slot4Choice) {
+    const loadout = buildFourSlotLoadout(overrideSlot4 || this.profile.slot4Choice);
+    const target = loadout[slotIndex] || loadout[0];
+    if (target) {
+      this.lobby.setWeaponById(target.id);
+    }
   }
 
   public previewLobbyAccent(hex: string) {
@@ -835,7 +886,104 @@ export class GameEngine {
     this.contextLost = false;
   };
 
+  private createPointerLockControls(): PointerLockControls {
+    const ctrl = new PointerLockControls(this.camera, this.renderer.domElement);
+    ctrl.pointerSpeed = this.profile.mouseSensitivity;
+    const internalErrorListener = (ctrl as unknown as { _onPointerlockError?: EventListener })
+      ._onPointerlockError;
+    if (internalErrorListener) {
+      this.renderer.domElement.ownerDocument.removeEventListener(
+        'pointerlockerror',
+        internalErrorListener
+      );
+    }
+    ctrl.addEventListener('lock', this.onControlsLock);
+    ctrl.addEventListener('unlock', this.onControlsUnlock);
+    return ctrl;
+  }
+
+  private clearPointerLockNoticeTimer() {
+    if (this.pointerLockNoticeTimer !== null) {
+      window.clearTimeout(this.pointerLockNoticeTimer);
+      this.pointerLockNoticeTimer = null;
+    }
+  }
+
+  private handlePointerLockRejected(err?: unknown) {
+    if (this.state.isInMenu || this.state.isDead) return;
+    const msg =
+      err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+    const isCooldown =
+      /exited|cooldown|immediately|security/i.test(msg);
+
+    this.state.isInventoryOpen = false;
+    this.state.isPaused = true;
+    this.isMouseDown = false;
+    this.isAiming = false;
+    this.state.isAiming = false;
+    this.state.isScoped = false;
+    this.state.pointerLockNotice = isCooldown
+      ? 'Pointer lock cooling down — wait 1s and click Resume.'
+      : 'Click Resume to lock mouse aim.';
+
+    this.clearPointerLockNoticeTimer();
+    this.pointerLockNoticeTimer = window.setTimeout(() => {
+      this.pointerLockNoticeTimer = null;
+      if (this.state.pointerLockNotice) {
+        this.state.pointerLockNotice = null;
+        this.emitState();
+      }
+    }, 3000);
+
+    this.emitState();
+  }
+
+  private onPointerLockError = (e: Event) => {
+    e.stopImmediatePropagation();
+    this.handlePointerLockRejected();
+  };
+
+  private requestPointerLockSafe() {
+    if (this.contextLost) return;
+    const el = this.renderer.domElement;
+    if (!el || typeof el.requestPointerLock !== 'function') {
+      this.handlePointerLockRejected();
+      return;
+    }
+    if (document.pointerLockElement === el || this.controls.isLocked) {
+      if (this.state.pointerLockNotice) {
+        this.clearPointerLockNoticeTimer();
+        this.state.pointerLockNotice = null;
+        this.emitState();
+      }
+      return;
+    }
+
+    try {
+      const maybePromise = el.requestPointerLock() as unknown as Promise<void> | undefined;
+      if (maybePromise && typeof maybePromise.catch === 'function') {
+        maybePromise.catch((err: unknown) => {
+          this.handlePointerLockRejected(err);
+        });
+      }
+    } catch (err) {
+      this.handlePointerLockRejected(err);
+    }
+  }
+
+  private unlockPointerSafe() {
+    if (document.pointerLockElement || this.controls.isLocked) {
+      try {
+        this.controls.unlock();
+      } catch {
+        // ignore unlock failures when document is not locked
+      }
+    }
+  }
+
   private onControlsLock = () => {
+    this.clearPointerLockNoticeTimer();
+    this.state.pointerLockNotice = null;
     this.state.isPaused = false;
     this.state.isInventoryOpen = false;
     this.state.isInMenu = false;
@@ -858,8 +1006,7 @@ export class GameEngine {
 
   // --- Input Binding ---
   private bindEvents() {
-    this.controls.addEventListener('lock', this.onControlsLock);
-    this.controls.addEventListener('unlock', this.onControlsUnlock);
+    document.addEventListener('pointerlockerror', this.onPointerLockError, true);
 
     const canvas = this.renderer.domElement;
     canvas.addEventListener('pointerdown', this.onLobbyPointerDown);
@@ -977,7 +1124,7 @@ export class GameEngine {
         if (this.isGrounded) {
           this.isCrouching = false;
           this.state.isCrouching = false;
-          this.playerVel.y = 7.6;
+          this.playerVel.y = 7.6 * this.state.adminCheats.jumpMultiplier;
           this.isGrounded = false;
         }
         break;
@@ -1010,15 +1157,6 @@ export class GameEngine {
         break;
       case 'Digit4':
         this.equipWeapon(3);
-        break;
-      case 'Digit5':
-        this.equipWeapon(4);
-        break;
-      case 'Digit6':
-        this.equipWeapon(5);
-        break;
-      case 'Digit7':
-        this.equipWeapon(6);
         break;
     }
   };
@@ -1057,7 +1195,12 @@ export class GameEngine {
     if (this.state.isPaused || this.state.isInventoryOpen || this.state.isDead || this.state.isInMenu) {
       return;
     }
-    if (!this.controls.isLocked) return;
+    if (!this.controls.isLocked) {
+      if (e.target === this.renderer.domElement) {
+        this.requestPointerLockSafe();
+      }
+      return;
+    }
 
     if (e.button === 0) {
       this.isMouseDown = true;
@@ -1095,6 +1238,8 @@ export class GameEngine {
 
   // --- Menu, Inventory & Combat Flow ---
   public enterMenuMode() {
+    this.clearPointerLockNoticeTimer();
+    this.state.pointerLockNotice = null;
     this.state.isInMenu = true;
     this.state.isPaused = true;
     this.state.isInventoryOpen = false;
@@ -1103,12 +1248,12 @@ export class GameEngine {
     this.weaponRig.visible = false;
     soundSystem.stopBossMusic();
     this.setBossAtmosphere(false);
-    this.lobby.setWeapon(this.profile.preferredSlot || 0);
+    const menuLoadout = buildFourSlotLoadout(this.profile.slot4Choice);
+    const menuSlot = Math.max(0, Math.min(3, this.profile.preferredSlot || 0));
+    this.lobby.setWeaponById(menuLoadout[menuSlot]?.id || 'ar_x7');
     this.lobby.setAccentColor(this.profile.accentColor);
     this.lobby.setFocusMode('overview');
-    if (this.controls.isLocked) {
-      this.controls.unlock();
-    }
+    this.unlockPointerSafe();
     soundSystem.startLobbyAmbient();
     this.emitState();
   }
@@ -1118,13 +1263,13 @@ export class GameEngine {
     this.state.isInventoryOpen = !this.state.isInventoryOpen;
 
     if (this.state.isInventoryOpen) {
-      this.controls.unlock();
+      this.unlockPointerSafe();
       this.isMouseDown = false;
       this.isAiming = false;
       this.state.isAiming = false;
       this.state.isScoped = false;
     } else {
-      this.controls.lock();
+      this.requestPointerLockSafe();
     }
     this.emitState();
   }
@@ -1189,7 +1334,9 @@ export class GameEngine {
       return false;
     }
 
-    med.currentAmmo--;
+    if (!this.state.adminCheats.infiniteAmmo) {
+      med.currentAmmo--;
+    }
     this.state.health = Math.min(this.state.maxHealth, this.state.health + 60);
     this.state.armor = Math.min(this.state.maxArmor, this.state.armor + 35);
     soundSystem.playHeal();
@@ -1199,13 +1346,15 @@ export class GameEngine {
 
   private throwGrenade() {
     const wep = this.state.weapons[this.state.activeWeaponIndex];
-    if (wep.type !== 'grenade' || wep.currentAmmo <= 0) {
+    if (wep.type !== 'grenade' || (!this.state.adminCheats.infiniteAmmo && wep.currentAmmo <= 0)) {
       soundSystem.playDryFire();
       this.shootCooldown = 0.25;
       return;
     }
 
-    wep.currentAmmo--;
+    if (!this.state.adminCheats.infiniteAmmo) {
+      wep.currentAmmo--;
+    }
     this.shootCooldown = wep.fireRate;
     this.recoilPitch = 0.08;
     this.recoilZ = 0.06;
@@ -1364,6 +1513,13 @@ export class GameEngine {
     if (this.swapPhase === 'unequip') return;
     const wep = this.state.weapons[this.state.activeWeaponIndex];
     if (wep.type === 'medkit' || wep.type === 'grenade') return;
+    if (this.state.adminCheats.infiniteAmmo) {
+      wep.currentAmmo = wep.magSize;
+      this.isReloading = false;
+      this.state.isReloading = false;
+      this.emitState();
+      return;
+    }
     if (this.isReloading || wep.currentAmmo === wep.magSize || wep.reserveAmmo <= 0) return;
 
     this.isReloading = true;
@@ -1405,13 +1561,17 @@ export class GameEngine {
       return;
     }
 
-    if (wep.currentAmmo <= 0) {
+    if (!this.state.adminCheats.infiniteAmmo && wep.currentAmmo <= 0) {
       soundSystem.playDryFire();
       this.shootCooldown = 0.25;
       return;
     }
 
-    wep.currentAmmo--;
+    if (this.state.adminCheats.infiniteAmmo) {
+      wep.currentAmmo = wep.magSize;
+    } else {
+      wep.currentAmmo--;
+    }
     this.shootCooldown = wep.fireRate;
     this.boltKick = 1.0;
     const shotsFired = wep.pellets || 1;
@@ -1618,7 +1778,7 @@ export class GameEngine {
     }
 
     this.saveProfile();
-    if (wep.currentAmmo === 0 && wep.reserveAmmo > 0) {
+    if (!this.state.adminCheats.infiniteAmmo && wep.currentAmmo === 0 && wep.reserveAmmo > 0) {
       this.startReload();
     } else {
       this.emitState();
@@ -1655,7 +1815,7 @@ export class GameEngine {
   }
 
   private resolveFullWeaponName(wepShortOrName: string): string {
-    const matched = INITIAL_WEAPONS.find(
+    const matched = [...INITIAL_WEAPONS, ...SLOT4_OPTIONS].find(
       (w) => w.shortName === wepShortOrName || w.name === wepShortOrName
     );
     if (matched) return matched.name;
@@ -1872,7 +2032,7 @@ export class GameEngine {
   }
 
   public damagePlayer(amount: number) {
-    if (this.state.isDead) return;
+    if (this.state.isDead || this.state.adminCheats.godMode) return;
     soundSystem.playPlayerHurt();
     this.state.damageVignette = 0.8;
 
@@ -2043,7 +2203,7 @@ export class GameEngine {
     this.emitState();
   }
 
-  public startGame() {
+  public startGame(initialWave = 1, autoLock = true) {
     soundSystem.stopLobbyAmbient();
     soundSystem.stopBossMusic();
     this.setBossAtmosphere(false);
@@ -2051,7 +2211,7 @@ export class GameEngine {
     this.state.armor = 100;
     this.state.score = 0;
     this.state.isDead = false;
-    this.state.isPaused = false;
+    this.state.isPaused = !autoLock;
     this.state.isInMenu = false;
     this.state.isInventoryOpen = false;
     this.state.killFeed = [];
@@ -2073,7 +2233,8 @@ export class GameEngine {
     this.state.vampireHealEvent = null;
     this.vampireHealTimer = 0;
     this.matchWeaponKills = {};
-    this.state.weapons = JSON.parse(JSON.stringify(INITIAL_WEAPONS));
+    this.state.weapons = buildFourSlotLoadout(this.profile.slot4Choice);
+    this.previousWeaponIndex = 3;
 
     this.activeGrenades.forEach((g) => this.scene.remove(g.mesh));
     this.activeGrenades = [];
@@ -2084,7 +2245,11 @@ export class GameEngine {
     this.tacticalLight.intensity = 0;
     this.laserDot.visible = false;
 
-    this.equipWeapon(this.profile.preferredSlot || 0, true);
+    const startIdx =
+      this.profile.slot4Choice === 'nano_medkit' && this.profile.preferredSlot === 3
+        ? 0
+        : Math.max(0, Math.min(3, this.profile.preferredSlot || 0));
+    this.equipWeapon(startIdx, true);
     this.weaponRig.visible = true;
 
     this.isCrouching = false;
@@ -2096,13 +2261,123 @@ export class GameEngine {
     this.camera.position.copy(this.playerPos);
     this.camera.rotation.set(0, 0, 0);
 
-    this.startNewWave(1);
-    this.controls.lock();
+    this.startNewWave(initialWave);
+    if (autoLock) {
+      this.requestPointerLockSafe();
+    } else {
+      this.emitState();
+    }
   }
 
   public resumeGame() {
     if (this.state.isDead) return;
-    this.controls.lock();
+    this.requestPointerLockSafe();
+  }
+
+  // --- Secret Admin Panel Engine Controls ---
+  public pauseForAdmin() {
+    if (this.state.isInMenu || this.state.isDead) return;
+    this.clearPointerLockNoticeTimer();
+    this.state.pointerLockNotice = null;
+    this.state.isPaused = true;
+    this.state.isInventoryOpen = false;
+    this.isMouseDown = false;
+    this.isAiming = false;
+    this.state.isAiming = false;
+    this.state.isScoped = false;
+    this.unlockPointerSafe();
+    this.emitState();
+  }
+
+  public setAdminCheats(updates: Partial<AdminCheatsState>) {
+    this.state.adminCheats = {
+      ...this.state.adminCheats,
+      ...updates,
+    };
+    if (updates.godMode) {
+      this.state.health = this.state.maxHealth;
+      this.state.armor = this.state.maxArmor;
+    }
+    if (updates.infiniteAmmo) {
+      this.isReloading = false;
+      this.state.isReloading = false;
+      this.state.weapons.forEach((w) => {
+        if (w.type === 'medkit' || w.type === 'grenade') {
+          w.currentAmmo = w.maxReserve;
+        } else {
+          w.currentAmmo = w.magSize;
+          w.reserveAmmo = w.maxReserve;
+        }
+      });
+    }
+    this.emitState();
+  }
+
+  public adminSkipWave() {
+    if (this.state.isInMenu) {
+      this.startGame(2, false);
+      return;
+    }
+    if (this.state.isDead) return;
+    this.waveIntermissionTimer = 0;
+    this.state.prepPhaseRemaining = 0;
+    this.startNewWave(this.state.wave + 1);
+  }
+
+  public adminSummonBossWave() {
+    if (this.state.isInMenu) {
+      this.startGame(10, false);
+      return;
+    }
+    if (this.state.isDead) return;
+    this.waveIntermissionTimer = 0;
+    this.state.prepPhaseRemaining = 0;
+    this.startNewWave(10);
+  }
+
+  public adminKillAllHostiles(): number {
+    if (this.state.isInMenu || this.state.isDead) return 0;
+    let killedCount = 0;
+    const livingBots = this.enemies.filter((b) => !b.isDead);
+    for (let i = 0; i < livingBots.length; i++) {
+      const bot = livingBots[i];
+      bot.takeDamage(99999, true, 1);
+      killedCount++;
+      this.handleEnemyEliminated(bot, true, 'ADMIN-CMD');
+    }
+    if (this.boss && !this.boss.isDead) {
+      this.boss.takeDamage(999999, 'weakspot', 1);
+      killedCount++;
+      this.handleBossDefeated('ADMIN-CMD', 'weakspot');
+    }
+    return killedCount;
+  }
+
+  public adminGrantMaxXpAndUnlockAll() {
+    this.profile.xp += 50000;
+    this.state.sessionXp += 50000;
+    while (this.profile.xp >= this.profile.level * 250) {
+      this.profile.xp -= this.profile.level * 250;
+      this.profile.level++;
+    }
+    this.profile.allUnlocked = true;
+    const allBadges = ['SPECIALIST_SLAYER', 'ARSENAL_MASTER', 'ADMIN_OVERDRIVE'];
+    const merged = new Set([...(this.profile.achievements || []), ...allBadges]);
+    this.profile.achievements = Array.from(merged);
+
+    // Top off arsenal ammo & charges in active match
+    this.state.weapons.forEach((w) => {
+      if (w.type === 'medkit' || w.type === 'grenade') {
+        w.currentAmmo = w.maxReserve;
+      } else {
+        w.currentAmmo = w.magSize;
+        w.reserveAmmo = w.maxReserve;
+      }
+    });
+
+    soundSystem.playWaveComplete();
+    this.saveProfile();
+    this.emitState();
   }
 
   // --- Main Render & Simulation Loop ---
@@ -2206,6 +2481,7 @@ export class GameEngine {
       this.slowRemaining = Math.max(0, this.slowRemaining - delta);
       targetSpeed *= 0.62;
     }
+    targetSpeed *= this.state.adminCheats.speedMultiplier;
 
     // Gentle tactical regeneration during 15s Prep Phase
     if (this.waveIntermissionTimer > 0 && this.state.health < this.state.maxHealth) {
@@ -2775,9 +3051,11 @@ export class GameEngine {
   }
 
   public dispose() {
+    this.clearPointerLockNoticeTimer();
     cancelAnimationFrame(this.animFrameId);
     soundSystem.stopLobbyAmbient();
     soundSystem.stopBossMusic();
+    document.removeEventListener('pointerlockerror', this.onPointerLockError, true);
     const canvas = this.renderer.domElement;
     canvas.removeEventListener('webglcontextlost', this.onContextLost);
     canvas.removeEventListener('webglcontextrestored', this.onContextRestored);

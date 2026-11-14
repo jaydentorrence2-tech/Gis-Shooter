@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { getRankTitle, PlayerProfileData } from '../game/GameEngine';
-import { Play, User, Sliders, Download, Crosshair, Target, Trophy } from 'lucide-react';
+import { Play, User, Sliders, Download, Crosshair, Target, Trophy, FileText, Terminal } from 'lucide-react';
 import { generateStandaloneHtml } from '../game/standaloneHtml';
 import { soundSystem } from '../audio/SoundSystem';
 
@@ -17,6 +17,8 @@ interface MainMenuProps {
   onOpenSettings: () => void;
   onOpenCrosshair: () => void;
   onOpenLeaderboard: () => void;
+  onOpenPatchNotes: () => void;
+  onOpenAdmin: () => void;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
@@ -27,6 +29,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onOpenSettings,
   onOpenCrosshair,
   onOpenLeaderboard,
+  onOpenPatchNotes,
+  onOpenAdmin,
 }) => {
   const handleDownloadStandalone = () => {
     soundSystem.startLobbyAmbient();
@@ -169,13 +173,37 @@ export const MainMenu: React.FC<MainMenuProps> = ({
         </button>
 
         <div className="mt-5 text-xs font-mono-tech text-slate-500">
-          WASD Move · C Crouch · Shift Sprint · Space Jump · L-Click Fire · R-Click Aim · R Reload · F Light · 1–7 / Scroll Swap · Q Quick-Switch · Tab Inventory
+          WASD Move · C Crouch · Shift Sprint · Space Jump · L-Click Fire · R-Click Aim · R Reload · F Light · 1–4 / Scroll Swap · Q Quick-Switch · Tab Inventory
         </div>
       </div>
 
-      {/* Subtle Hangar Orbit Hint on bottom-right */}
-      <div className="hidden md:block self-end px-3.5 py-2 rounded-lg bg-[#0C1017]/80 border border-slate-800 text-[11px] font-mono-tech text-slate-400">
-        Drag to Orbit Hangar · Scroll to Zoom
+      {/* Top-Right: Patch Notes (v1.5) Button */}
+      <button
+        type="button"
+        onClick={() => {
+          soundSystem.startLobbyAmbient();
+          onOpenPatchNotes();
+        }}
+        className="pointer-events-auto self-start px-3.5 py-2 rounded-xl bg-[#131A26]/95 hover:bg-slate-800 border border-cyan-500/40 text-xs font-mono-tech font-semibold text-cyan-300 flex items-center gap-2 shadow-lg transition cursor-pointer whitespace-nowrap shrink-0"
+      >
+        <FileText className="w-4 h-4 text-cyan-400 shrink-0" />
+        Patch Notes (v1.5)
+      </button>
+
+      {/* Subtle Hangar Orbit Hint & Discreet Developer Console Trigger on bottom-right */}
+      <div className="pointer-events-auto absolute bottom-6 right-6 md:right-14 flex items-center gap-2">
+        <div className="hidden md:block px-3.5 py-2 rounded-lg bg-[#0C1017]/80 border border-slate-800 text-[11px] font-mono-tech text-slate-400">
+          Drag to Orbit Hangar · Scroll to Zoom
+        </div>
+        <button
+          type="button"
+          onClick={onOpenAdmin}
+          title="Developer Console"
+          aria-label="Open Developer Console"
+          className="p-2 rounded-lg bg-[#0C1017]/80 hover:bg-slate-800 border border-slate-800/90 text-slate-600 hover:text-amber-400 transition cursor-pointer"
+        >
+          <Terminal className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );

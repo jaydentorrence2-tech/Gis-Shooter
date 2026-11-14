@@ -16,6 +16,48 @@ interface HUDProps {
   profile: PlayerProfileData;
 }
 
+const WeaponMiniIcon: React.FC<{ type: string; active: boolean }> = ({ type, active }) => {
+  const stroke = active ? '#22d3ee' : '#94a3b8';
+  switch (type) {
+    case 'rifle':
+      return (
+        <svg width="26" height="12" viewBox="0 0 36 14" fill="none" aria-hidden="true" className="shrink-0">
+          <path d="M2 5h24l2 2h6v2h-6l-2 1H19l-1 3h-3l1-3H9l-3 3H2l1-4H2V5z" fill={stroke} />
+          <rect x="13" y="2" width="7" height="2" rx="0.5" fill={stroke} />
+        </svg>
+      );
+    case 'shotgun':
+      return (
+        <svg width="26" height="12" viewBox="0 0 36 14" fill="none" aria-hidden="true" className="shrink-0">
+          <path d="M2 6h28v2H19l-1 2h-5l1-2H8l-4 4H1l2-4H2V6z" fill={stroke} />
+          <rect x="18" y="8" width="8" height="2.2" rx="0.6" fill={active ? '#fbbf24' : '#64748b'} />
+        </svg>
+      );
+    case 'sniper':
+      return (
+        <svg width="26" height="12" viewBox="0 0 36 14" fill="none" aria-hidden="true" className="shrink-0">
+          <path d="M1 6h33v1.8H21l-1 2.2h-4l1-2.2H8l-4 3.7H1l1.5-3.7H1V6z" fill={stroke} />
+          <rect x="10" y="2.2" width="11" height="2.2" rx="0.8" fill={active ? '#38bdf8' : '#cbd5e1'} />
+          <path d="M25 8l3 4M25 8l-2 4" stroke={stroke} strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'pistol':
+      return (
+        <svg width="22" height="12" viewBox="0 0 28 14" fill="none" aria-hidden="true" className="shrink-0">
+          <path d="M4 3h19v3.5H12l-2 6H6l1.5-6H4V3z" fill={stroke} />
+        </svg>
+      );
+    case 'medkit':
+    default:
+      return (
+        <svg width="18" height="12" viewBox="0 0 20 14" fill="none" aria-hidden="true" className="shrink-0">
+          <rect x="3" y="2" width="14" height="10" rx="2" stroke={active ? '#34d399' : stroke} strokeWidth="1.5" />
+          <path d="M10 4.5v5M7.5 7h5" stroke={active ? '#34d399' : stroke} strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      );
+  }
+};
+
 export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
   const radarCanvasRef = useRef<HTMLCanvasElement>(null);
   const activeWep = state.weapons[state.activeWeaponIndex] || state.weapons[0];
@@ -323,6 +365,21 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
           </span>
         </div>
 
+        {(state.adminCheats?.godMode ||
+          state.adminCheats?.infiniteAmmo ||
+          (state.adminCheats?.speedMultiplier ?? 1) > 1.01 ||
+          (state.adminCheats?.jumpMultiplier ?? 1) > 1.01) && (
+          <div className="bg-[#0C1017]/90 border border-amber-500/50 rounded-lg px-3 py-1 flex items-center gap-2 text-[11px] font-mono-tech text-amber-300 tabular-nums shadow">
+            {state.adminCheats.godMode && <span className="font-bold text-emerald-400">GOD MODE</span>}
+            {state.adminCheats.infiniteAmmo && <span className="font-bold text-cyan-400">INF AMMO</span>}
+            {(state.adminCheats.speedMultiplier > 1.01 || state.adminCheats.jumpMultiplier > 1.01) && (
+              <span className="text-amber-300">
+                SPD {state.adminCheats.speedMultiplier.toFixed(1)}x · JMP {state.adminCheats.jumpMultiplier.toFixed(1)}x
+              </span>
+            )}
+          </div>
+        )}
+
         {state.killFeed.map((item) => (
           <div
             key={item.id}
@@ -427,25 +484,55 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
         </div>
       </div>
 
-      {/* 7. Bottom-Right: 7-Slot Arsenal Strip, Flashlight Indicator & Ammo Counter */}
+      {/* 7. Bottom-Right: Fixed 4-Slot Loadout Indicator Cards, Flashlight & Ammo Counter */}
       <div className="absolute bottom-6 right-6 flex items-end gap-3">
-        <div className="flex flex-col gap-0.5">
-          {state.weapons.map((w, idx) => (
-            <div
-              key={w.id}
-              className={`px-2.5 py-0.5 rounded-md border text-[11px] font-mono-tech font-semibold flex items-center justify-between gap-2.5 min-w-[144px] ${
-                state.activeWeaponIndex === idx
-                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300'
-                  : 'bg-[#0C1017]/90 border-slate-800 text-slate-400'
-              }`}
-            >
-              <span className="text-slate-500">[{w.slot}]</span>
-              <span className="flex-1 truncate">{w.shortName}</span>
-              <span className="text-slate-200">
-                {w.type === 'medkit' || w.type === 'grenade' ? `x${w.currentAmmo}` : w.currentAmmo}
-              </span>
-            </div>
-          ))}
+        <div className="flex flex-col gap-1.5">
+          {state.weapons.slice(0, 4).map((w, idx) => {
+            const isActive = state.activeWeaponIndex === idx;
+            const isUtility = w.type === 'medkit' || w.type === 'grenade';
+            const isEmpty = w.currentAmmo === 0 && (isUtility || w.reserveAmmo <= 0);
+            return (
+              <div
+                key={w.id}
+                className={`px-3 py-1.5 rounded-xl border text-[11px] font-mono-tech flex items-center justify-between gap-3 min-w-[208px] transition-all tabular-nums ${
+                  isActive
+                    ? 'bg-cyan-500/20 border-cyan-400 text-white shadow-[0_0_16px_rgba(6,182,212,0.28)]'
+                    : 'bg-[#0C1017]/90 border-slate-800 text-slate-400'
+                }`}
+              >
+                <span
+                  className={`w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                    isActive
+                      ? 'bg-cyan-400 text-slate-950'
+                      : 'bg-slate-900 border border-slate-700 text-slate-400'
+                  }`}
+                >
+                  {w.slot}
+                </span>
+                <WeaponMiniIcon type={w.type} active={isActive} />
+                <span
+                  className={`flex-1 truncate font-display font-bold tracking-wide ${
+                    isActive ? 'text-white' : 'text-slate-300'
+                  }`}
+                >
+                  {w.shortName}
+                </span>
+                <span
+                  className={`font-bold shrink-0 ${
+                    isEmpty
+                      ? 'text-rose-400'
+                      : isActive
+                      ? w.type === 'medkit'
+                        ? 'text-emerald-300'
+                        : 'text-cyan-300'
+                      : 'text-slate-300'
+                  }`}
+                >
+                  {isUtility ? `x${w.currentAmmo}` : `${w.currentAmmo}/${w.reserveAmmo}`}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         <div className="bg-[#0C1017]/90 border border-slate-700/80 rounded-2xl p-4 min-w-[220px] text-right">
@@ -510,7 +597,7 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
 
       {/* 8. Subtle Bottom Key Hint */}
       <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-lg bg-[#0C1017]/85 border border-slate-800/80 text-[11px] font-mono-tech text-slate-400 whitespace-nowrap">
-        WASD Move · C Crouch · L-Click Fire · R-Click ADS · R Reload · F Light · 1–7 / Scroll Swap · Q Quick-Switch · Tab Inventory
+        WASD Move · C Crouch · L-Click Fire · R-Click ADS · R Reload · F Light · 1–4 / Scroll Swap · Q Quick-Switch · Tab Inventory
       </div>
     </div>
   );
