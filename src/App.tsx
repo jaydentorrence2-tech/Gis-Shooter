@@ -10,6 +10,7 @@ import {
   DEFAULT_PROFILE,
 } from './game/GameEngine';
 import { LobbyFocusMode } from './game/lobby';
+import type { LeaderboardEntry } from './game/leaderboard';
 import { HUD } from './components/HUD';
 import { MainMenu } from './components/MainMenu';
 import { ArmoryModal } from './components/ArmoryModal';
@@ -23,10 +24,26 @@ import { LeaderboardModal } from './components/LeaderboardModal';
 import { PatchNotesModal } from './components/PatchNotesModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { soundSystem } from './audio/SoundSystem';
+import {
+  auth,
+  onAuthStateChanged,
+  signInWithGoogleAccount,
+  signOutGoogleAccount,
+  type User,
+} from './firebase/client';
+import {
+  type CloudUpsertResult,
+  deleteCloudLeaderboardEntry,
+  fetchOperativeAccount,
+  type OperativeAccountDoc,
+  subscribeCloudLeaderboard,
+  upsertCloudPersonalBest,
+} from './firebase/cloudLeaderboard';
 
 export default function App() {
   const canvasMountRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
+  const lastSubmittedEntryRef = useRef<LeaderboardEntry | null>(null);
 
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [profile, setProfile] = useState<PlayerProfileData>(DEFAULT_PROFILE);
@@ -36,6 +53,42 @@ export default function App() {
   const [showPostGameLeaderboard, setShowPostGameLeaderboard] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+
+  // Cloud Firebase Auth & Real-Time Leaderboard State
+  const [cloudUser, setCloudUser] = useState<User | null>(null);
+  const [operativeAccount, setOperativeAccount] = useState<OperativeAccountDoc | null>(null);
+  const [cloudEntries, setCloudEntries] = useState<LeaderboardEntry[]>([]);
+  const [cloudStatus, setCloudStatus] = useState<'connecting' | 'live' | 'offline'>('connecting');
+  const [cloudSyncState, setCloudSyncState] = useState<{
+    status: 'idle' | 'syncing' | CloudUpsertResult['status'];
+    message?: string;
+  }>({ status: 'idle' });
+
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      setCloudUser(user);
+      if (user) {
+        try {
+          const acc = await fetchOperativeAccount(user.uid);
+          setOperativeAccount(acc);
+        } catch {
+          setOperativeAccount(null);
+        }
+      } else {
+        setOperativeAccount(null);
+      }
+    });
+
+    const unsubBoard = subscribeCloudLeaderboard(
+      (entries) => setCloudEntries(entries),
+      (status) => setCloudStatus(status)
+    );
+
+    return () => {
+      unsubAuth();
+      unsubBoard();
+    };
+  }, []);
 
   useEffect(() => {
     if (!canvasMountRef.current) return;
@@ -135,10 +188,49 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
+  const syncEntryToCloud = async (user: User | null, entry: LeaderboardEntry) => {
+    setCloudSyncState({ status: 'syncing', message: 'Syncing to Global Cloud...' });
+    const res = await upsertCloudPersonalBest(user, {
+      callsign: entry.callsign,
+      countryCode: entry.countryCode,
+      flag: entry.flag,
+      score: entry.score,
+      wave: entry.wave,
+      kills: entry.kills,
+      headshots: entry.headshots,
+      accuracy: entry.accuracy,
+      survivalSec: entry.survivalSec,
+      xpEarned: entry.xpEarned,
+      level: entry.level ?? profile.level,
+      avatarColor: entry.avatarColor ?? profile.accentColor,
+      favoriteWeapon: entry.favoriteWeapon ?? 'AR-X7 Tactical',
+      weekKey: entry.weekKey,
+      hasPin: Boolean(operativeAccount?.pinHash),
+    });
+    setCloudSyncState({ status: res.status, message: res.message });
+  };
+
+  const handleSubmitMatchScore = () => {
+    const result = engineRef.current?.submitMatchScore();
+    if (!result) return;
+    lastSubmittedEntryRef.current = result.entry;
+    void syncEntryToCloud(cloudUser, result.entry);
+  };
+
+  const handleSignInAndSync = async () => {
+    const signedInUser = await signInWithGoogleAccount();
+    setCloudUser(signedInUser);
+    if (lastSubmittedEntryRef.current) {
+      await syncEntryToCloud(signedInUser, lastSubmittedEntryRef.current);
+    }
+  };
+
   const handleStartGame = () => {
     soundSystem.resume();
     setActiveMenuModal('none');
     setShowPostGameLeaderboard(false);
+    setCloudSyncState({ status: 'idle' });
+    lastSubmittedEntryRef.current = null;
     engineRef.current?.startGame();
   };
 
@@ -150,12 +242,16 @@ export default function App() {
   const handleRestartGame = () => {
     soundSystem.resume();
     setShowPostGameLeaderboard(false);
+    setCloudSyncState({ status: 'idle' });
+    lastSubmittedEntryRef.current = null;
     engineRef.current?.startGame();
   };
 
   const handleReturnToMenu = () => {
     setActiveMenuModal('none');
     setShowPostGameLeaderboard(false);
+    setCloudSyncState({ status: 'idle' });
+    lastSubmittedEntryRef.current = null;
     engineRef.current?.enterMenuMode();
   };
 
@@ -202,8 +298,15 @@ export default function App() {
       {isInMenu && activeMenuModal === 'profile' && (
         <ProfileModal
           profile={profile}
+          cloudUser={cloudUser}
+          operativeAccount={operativeAccount}
+          onSignInGoogle={async () => {
+            await signInWithGoogleAccount();
+          }}
+          onSignOutGoogle={signOutGoogleAccount}
           onPreviewAccent={(hex) => engineRef.current?.previewLobbyAccent(hex)}
           onSave={handleUpdateProfile}
+          onCloudAccountSaved={(acc) => setOperativeAccount(acc)}
           onClose={() => setActiveMenuModal('none')}
         />
       )}
@@ -228,6 +331,12 @@ export default function App() {
         <LeaderboardModal
           activeCallsign={profile.callsign}
           profile={profile}
+          cloudEntries={cloudEntries}
+          cloudStatus={cloudStatus}
+          cloudUser={cloudUser}
+          onSignInGoogle={async () => {
+            await signInWithGoogleAccount();
+          }}
           onClose={() => setActiveMenuModal('none')}
         />
       )}
@@ -271,7 +380,10 @@ export default function App() {
         <GameOverModal
           state={gameState}
           profile={profile}
-          onSubmitScore={() => engineRef.current?.submitMatchScore()}
+          cloudUser={cloudUser}
+          cloudSyncState={cloudSyncState}
+          onSubmitScore={handleSubmitMatchScore}
+          onSignInAndSync={handleSignInAndSync}
           onOpenLeaderboard={() => setShowPostGameLeaderboard(true)}
           onRestart={handleRestartGame}
           onReturnToMenu={handleReturnToMenu}
@@ -283,6 +395,10 @@ export default function App() {
         <LeaderboardModal
           activeCallsign={profile.callsign}
           profile={profile}
+          cloudEntries={cloudEntries}
+          cloudStatus={cloudStatus}
+          cloudUser={cloudUser}
+          onSignInGoogle={handleSignInAndSync}
           onClose={() => setShowPostGameLeaderboard(false)}
         />
       )}
@@ -296,6 +412,34 @@ export default function App() {
           onClose={() => setIsAdminOpen(false)}
           gameState={gameState}
           profile={profile}
+          cloudEntries={cloudEntries}
+          cloudUser={cloudUser}
+          onCloudAdminSaveScore={async (entry) => {
+            await upsertCloudPersonalBest(
+              cloudUser,
+              {
+                callsign: entry.callsign,
+                countryCode: entry.countryCode,
+                flag: entry.flag,
+                score: entry.score,
+                wave: entry.wave,
+                kills: entry.kills,
+                headshots: entry.headshots,
+                accuracy: entry.accuracy,
+                survivalSec: entry.survivalSec,
+                xpEarned: entry.xpEarned,
+                level: entry.level ?? 10,
+                avatarColor: entry.avatarColor ?? '#f59e0b',
+                favoriteWeapon: entry.favoriteWeapon ?? 'AR-X7 Tactical',
+                weekKey: entry.weekKey,
+                hasPin: false,
+              },
+              true
+            );
+          }}
+          onCloudAdminDelete={async (id, callsign) => {
+            await deleteCloudLeaderboardEntry(id.startsWith('cloud_') ? id : callsign);
+          }}
           onSkipWave={() => engineRef.current?.adminSkipWave()}
           onSummonBoss={() => engineRef.current?.adminSummonBossWave()}
           onKillAllHostiles={() => engineRef.current?.adminKillAllHostiles() ?? 0}

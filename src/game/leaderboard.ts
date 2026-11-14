@@ -24,6 +24,9 @@ export interface LeaderboardEntry {
   level?: number;
   avatarColor?: string;
   favoriteWeapon?: string;
+  isCloud?: boolean;
+  ownerUid?: string;
+  hasPin?: boolean;
 }
 
 export const LEADERBOARD_STORAGE_KEY = 'GIS_SHOOTER_LEADERBOARD_V1';
@@ -392,12 +395,14 @@ export interface LeaderboardResult {
   activePlayerBestRank: number | null;
   activePlayerBestScore: number | null;
   localRunCount: number;
+  cloudRunCount: number;
   weekKey: string;
 }
 
 export function getMergedLeaderboard(
   tab: LeaderboardTab,
-  activeCallsign: string
+  activeCallsign: string,
+  cloudEntries: LeaderboardEntry[] = []
 ): LeaderboardResult {
   const local = loadLocalScores();
   const weekKey = getCurrentWeekKey();
@@ -405,14 +410,34 @@ export function getMergedLeaderboard(
   const bannedSet = new Set(loadBannedCallsigns());
   const deletedSet = new Set(loadDeletedScoreIds());
 
+  // Map best cloud score per normalized callsign so we don't duplicate synced local runs in Global/Weekly
+  const cloudBestByCallsign = new Map<string, number>();
+  for (const c of cloudEntries) {
+    const k = c.callsign.trim().toUpperCase();
+    const prev = cloudBestByCallsign.get(k) ?? -1;
+    if (c.score > prev) cloudBestByCallsign.set(k, c.score);
+  }
+
   let pool: LeaderboardEntry[] = [];
   if (tab === 'personal') {
-    pool = [...local];
+    const myCloud = cloudEntries.filter(
+      (c) => c.callsign.trim().toUpperCase() === normalizedActive
+    );
+    pool = [...myCloud, ...local];
   } else if (tab === 'weekly') {
-    const weeklyLocal = local.filter((e) => !e.weekKey || e.weekKey === weekKey);
-    pool = [...weeklyLocal, ...getWeeklyBots(weekKey)];
+    const weeklyCloud = cloudEntries.filter((e) => !e.weekKey || e.weekKey === weekKey);
+    const weeklyLocal = local.filter((e) => {
+      if (e.weekKey && e.weekKey !== weekKey) return false;
+      const cloudScore = cloudBestByCallsign.get(e.callsign.trim().toUpperCase());
+      return cloudScore === undefined || e.score > cloudScore;
+    });
+    pool = [...weeklyCloud, ...weeklyLocal, ...getWeeklyBots(weekKey)];
   } else {
-    pool = [...local, ...GLOBAL_BOTS];
+    const unsyncedLocal = local.filter((e) => {
+      const cloudScore = cloudBestByCallsign.get(e.callsign.trim().toUpperCase());
+      return cloudScore === undefined || e.score > cloudScore;
+    });
+    pool = [...cloudEntries, ...unsyncedLocal, ...GLOBAL_BOTS];
   }
 
   pool = pool.filter(
@@ -462,6 +487,7 @@ export function getMergedLeaderboard(
     activePlayerBestRank,
     activePlayerBestScore,
     localRunCount: local.length,
+    cloudRunCount: cloudEntries.length,
     weekKey,
   };
 }

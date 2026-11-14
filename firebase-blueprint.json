@@ -1,0 +1,175 @@
+{
+  "entities": {
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public operative personal-best record on the global cloud leaderboard",
+      "type": "object",
+      "properties": {
+        "callsignKey": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "callsign": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 16
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "countryCode": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 4
+        },
+        "flag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12
+        },
+        "score": {
+          "type": "integer"
+        },
+        "wave": {
+          "type": "integer"
+        },
+        "kills": {
+          "type": "integer"
+        },
+        "headshots": {
+          "type": "integer"
+        },
+        "accuracy": {
+          "type": "integer"
+        },
+        "survivalSec": {
+          "type": "integer"
+        },
+        "xpEarned": {
+          "type": "integer"
+        },
+        "level": {
+          "type": "integer"
+        },
+        "avatarColor": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "favoriteWeapon": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 48
+        },
+        "weekKey": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 12,
+          "pattern": "^[0-9]{4}-W[0-9]{2}$"
+        },
+        "isPlayer": {
+          "type": "boolean"
+        },
+        "hasPin": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "callsignKey",
+        "callsign",
+        "ownerUid",
+        "countryCode",
+        "flag",
+        "score",
+        "wave",
+        "kills",
+        "headshots",
+        "accuracy",
+        "survivalSec",
+        "xpEarned",
+        "level",
+        "avatarColor",
+        "favoriteWeapon",
+        "weekKey",
+        "isPlayer",
+        "hasPin",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "OperativeAccount": {
+      "title": "OperativeAccount",
+      "description": "Private owner-only operative identity binding and optional hashed PIN",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "primaryCallsign": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "pinHash": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "accentColor": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 16,
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "primaryCallsign",
+        "pinHash",
+        "accentColor",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/leaderboard/{callsignKey}": {
+      "schema": {
+        "$ref": "#/entities/LeaderboardEntry"
+      },
+      "description": "Public global personal-best records keyed by normalized operative callsign"
+    },
+    "/operatives/{uid}": {
+      "schema": {
+        "$ref": "#/entities/OperativeAccount"
+      },
+      "description": "Private owner-only operative identity and PIN hash verification record"
+    }
+  }
+}

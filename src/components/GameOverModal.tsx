@@ -1,18 +1,26 @@
 /**
  * Game Over & Mission Debrief Modal
  * Displays per-match combat stats (Total Kills, Headshots, Accuracy, Survival Time, XP Earned)
- * and provides explicit Submit Score & View Leaderboard actions.
+ * and provides explicit Submit Score & Cloud Global Sync actions.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { GameState, PlayerProfileData } from '../game/GameEngine';
 import { formatSurvivalTime } from '../game/leaderboard';
-import { RotateCcw, Home, Skull, Trophy, Upload, CheckCircle2 } from 'lucide-react';
+import { RotateCcw, Home, Skull, Trophy, Upload, CheckCircle2, Cloud, LogIn } from 'lucide-react';
+import type { User } from 'firebase/auth';
+import type { CloudUpsertResult } from '../firebase/cloudLeaderboard';
 
 interface GameOverModalProps {
   state: GameState;
   profile: PlayerProfileData;
+  cloudUser: User | null;
+  cloudSyncState: {
+    status: 'idle' | 'syncing' | CloudUpsertResult['status'];
+    message?: string;
+  };
   onSubmitScore: () => void;
+  onSignInAndSync: () => Promise<void>;
   onOpenLeaderboard: () => void;
   onRestart: () => void;
   onReturnToMenu: () => void;
@@ -21,15 +29,28 @@ interface GameOverModalProps {
 export const GameOverModal: React.FC<GameOverModalProps> = ({
   state,
   profile,
+  cloudUser,
+  cloudSyncState,
   onSubmitScore,
+  onSignInAndSync,
   onOpenLeaderboard,
   onRestart,
   onReturnToMenu,
 }) => {
+  const [syncBusy, setSyncBusy] = useState(false);
   const accuracy =
     state.sessionShots > 0
       ? Math.min(100, Math.round((state.sessionHits / state.sessionShots) * 100))
       : 0;
+
+  const handleSignInSync = async () => {
+    setSyncBusy(true);
+    try {
+      await onSignInAndSync();
+    } finally {
+      setSyncBusy(false);
+    }
+  };
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/90 p-4 select-none">
@@ -94,28 +115,48 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               onClick={onSubmitScore}
               className="w-full py-3.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-cyan-500/20"
             >
-              <Upload className="w-4 h-4" /> Submit Score to Leaderboard
+              <Upload className="w-4 h-4" />
+              {cloudUser ? 'Submit Score to Global Cloud' : 'Submit Score to Leaderboard'}
             </button>
           ) : (
-            <div className="p-3 rounded-xl bg-emerald-500/12 border border-emerald-500/40 flex items-center justify-between gap-3 text-left">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold text-emerald-300 truncate">
-                    Score Logged · Global Rank #{state.submittedRank ?? '—'}
-                  </div>
-                  <div className="text-[11px] font-mono-tech text-slate-400">
-                    Operative Level {profile.level}
+            <div className="p-3 rounded-xl bg-emerald-500/12 border border-emerald-500/40 space-y-2.5 text-left">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-emerald-300 truncate tabular-nums">
+                      Score Logged · Rank #{state.submittedRank ?? '—'}
+                    </div>
+                    <div className="text-[11px] font-mono-tech text-slate-400 truncate flex items-center gap-1.5">
+                      <Cloud className="w-3 h-3 text-cyan-400 shrink-0" />
+                      <span>
+                        {cloudSyncState.status === 'syncing'
+                          ? 'Syncing to Global Cloud...'
+                          : cloudSyncState.message || `Operative Level ${profile.level}`}
+                      </span>
+                    </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={onOpenLeaderboard}
+                  className="px-3.5 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Trophy className="w-3.5 h-3.5" /> Leaderboard
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={onOpenLeaderboard}
-                className="px-3.5 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shrink-0"
-              >
-                <Trophy className="w-3.5 h-3.5" /> Leaderboard
-              </button>
+
+              {!cloudUser && cloudSyncState.status === 'auth_required' && (
+                <button
+                  type="button"
+                  disabled={syncBusy}
+                  onClick={handleSignInSync}
+                  className="w-full py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 text-cyan-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-60"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  {syncBusy ? 'Signing In...' : 'Sign In with Google & Sync to Global Cloud'}
+                </button>
+              )}
             </div>
           )}
 

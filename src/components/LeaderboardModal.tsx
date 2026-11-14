@@ -1,16 +1,19 @@
 /**
- * Centered Hybrid Global / Local Leaderboard Modal with Interactive Operator Profile Inspection
- * Clicking any operator row opens a centered "Operator Profile Card" pop-up showing visor avatar,
- * rank & level, total kills, headshot ratio, accuracy, and favorite weapon.
+ * Centered Hybrid Global Cloud / Local Leaderboard Modal with Interactive Operator Profile Inspection
+ * - Streams real-time Top 100 cloud operatives from Cloud Firestore and merges with Global Bots & local runs
+ * - Clicking any operator row opens a centered "Operator Profile Card" pop-up showing visor avatar,
+ *   rank & level, total kills, headshot ratio, accuracy, and favorite weapon.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Trophy, X, Medal, Calendar, UserCheck, Globe, Crosshair, ChevronRight } from 'lucide-react';
+import { Trophy, X, Medal, Calendar, UserCheck, Globe, Crosshair, ChevronRight, LogIn } from 'lucide-react';
+import type { User } from 'firebase/auth';
 import {
   formatSurvivalTime,
   getMergedLeaderboard,
-  LeaderboardTab,
-  RankedLeaderboardRow,
+  type LeaderboardEntry,
+  type LeaderboardTab,
+  type RankedLeaderboardRow,
   resolveOperatorProfileDetails,
 } from '../game/leaderboard';
 import type { PlayerProfileData } from '../game/GameEngine';
@@ -18,6 +21,10 @@ import type { PlayerProfileData } from '../game/GameEngine';
 interface LeaderboardModalProps {
   activeCallsign: string;
   profile?: PlayerProfileData;
+  cloudEntries: LeaderboardEntry[];
+  cloudStatus: 'connecting' | 'live' | 'offline';
+  cloudUser: User | null;
+  onSignInGoogle?: () => Promise<void>;
   initialTab?: LeaderboardTab;
   onClose: () => void;
 }
@@ -31,15 +38,20 @@ const TABS: { id: LeaderboardTab; label: string; icon: React.ReactNode }[] = [
 export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   activeCallsign,
   profile,
+  cloudEntries,
+  cloudStatus,
+  cloudUser,
+  onSignInGoogle,
   initialTab = 'global',
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>(initialTab);
   const [selectedRow, setSelectedRow] = useState<RankedLeaderboardRow | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
 
   const board = useMemo(
-    () => getMergedLeaderboard(activeTab, activeCallsign),
-    [activeTab, activeCallsign]
+    () => getMergedLeaderboard(activeTab, activeCallsign, cloudEntries),
+    [activeTab, activeCallsign, cloudEntries]
   );
 
   const selectedOperator = useMemo(
@@ -61,6 +73,16 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedRow, onClose]);
+
+  const handleQuickSignIn = async () => {
+    if (!onSignInGoogle) return;
+    setSigningIn(true);
+    try {
+      await onSignInGoogle();
+    } finally {
+      setSigningIn(false);
+    }
+  };
 
   const renderRankCell = (rank: number) => {
     if (rank === 1) {
@@ -107,20 +129,38 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
               <h2 className="text-xl font-display font-bold text-white leading-tight truncate">
                 Tactical Leaderboard
               </h2>
-              <p className="text-xs font-mono-tech text-slate-400 truncate">
-                Hybrid Global &amp; Local Operative Rankings · Season {board.weekKey}
+              <p className="text-xs font-mono-tech text-slate-400 truncate tabular-nums">
+                Global Cloud &amp; Local Operative Rankings · Season {board.weekKey} ·{' '}
+                {cloudStatus === 'live'
+                  ? `Live Cloud (${board.cloudRunCount} Players)`
+                  : cloudStatus === 'connecting'
+                  ? 'Connecting to Cloud...'
+                  : 'Offline Cache'}
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close leaderboard"
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {!cloudUser && onSignInGoogle && (
+              <button
+                type="button"
+                disabled={signingIn}
+                onClick={handleQuickSignIn}
+                className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-60"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                {signingIn ? 'Connecting...' : 'Sign In with Google'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close leaderboard"
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Active Operative Rank Strip + Tab Controls */}
@@ -150,6 +190,13 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5 text-xs font-mono-tech text-slate-300 tabular-nums">
+            {cloudStatus === 'live' && (
+              <span className="inline-flex items-center gap-1.5 text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" aria-hidden="true" />
+                Live
+              </span>
+            )}
+            <span aria-hidden="true" className="text-slate-600">·</span>
             <span className="text-slate-400">Operative:</span>
             <span className="font-bold text-cyan-400">{activeCallsign}</span>
             <span aria-hidden="true" className="text-slate-600">·</span>
@@ -157,9 +204,6 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             <span className="font-bold text-amber-400">
               {board.activePlayerBestRank ? `#${board.activePlayerBestRank}` : 'Unranked'}
             </span>
-            <span aria-hidden="true" className="text-slate-600">·</span>
-            <span className="text-slate-400">Runs:</span>
-            <span className="font-bold text-white">{board.localRunCount}</span>
           </div>
         </div>
 
@@ -227,7 +271,12 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                           >
                             {row.callsign}
                           </span>
-                          {row.isPlayer && (
+                          {row.isCloud && (
+                            <span className="text-[10px] font-mono-tech font-semibold text-emerald-400 shrink-0">
+                              · CLOUD
+                            </span>
+                          )}
+                          {row.isActivePlayer && (
                             <span className="text-[10px] font-mono-tech font-semibold text-cyan-400 shrink-0">
                               · YOU
                             </span>
@@ -288,7 +337,6 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           >
             <div className="flex items-start justify-between gap-4 mb-5">
               <div className="flex items-center gap-3.5 min-w-0">
-                {/* Tactical Avatar / Visor Accent Swatch */}
                 <div
                   className="w-14 h-14 rounded-xl flex flex-col items-center justify-center font-display font-bold text-slate-950 text-xl shrink-0 border border-white/25 relative overflow-hidden"
                   style={{ backgroundColor: selectedOperator.avatarColor }}
@@ -303,6 +351,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 <div className="min-w-0">
                   <div className="text-[11px] font-mono-tech text-cyan-400 uppercase tracking-wider truncate">
                     {selectedOperator.rankTitle} · Level {selectedOperator.level}
+                    {selectedRow.isCloud ? ' · Cloud Verified' : ''}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-lg leading-none shrink-0" title={selectedOperator.countryCode}>

@@ -1,0 +1,157 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidUid(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCallsignKey(id) {
+      return id is string && id.size() >= 2 && id.size() <= 16 && id.matches('^[A-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'jaydentorrence2@gmail.com'
+      );
+    }
+
+    function isValidLeaderboardEntry(data, pathCallsignKey) {
+      return data.keys().hasAll([
+          'callsignKey', 'callsign', 'ownerUid', 'countryCode', 'flag',
+          'score', 'wave', 'kills', 'headshots', 'accuracy', 'survivalSec',
+          'xpEarned', 'level', 'avatarColor', 'favoriteWeapon', 'weekKey',
+          'isPlayer', 'hasPin', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'callsignKey', 'callsign', 'ownerUid', 'countryCode', 'flag',
+          'score', 'wave', 'kills', 'headshots', 'accuracy', 'survivalSec',
+          'xpEarned', 'level', 'avatarColor', 'favoriteWeapon', 'weekKey',
+          'isPlayer', 'hasPin', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidCallsignKey(data.callsignKey) &&
+        data.callsignKey == pathCallsignKey &&
+        data.callsign is string && data.callsign.size() >= 2 && data.callsign.size() <= 16 &&
+        isValidUid(data.ownerUid) &&
+        data.countryCode is string && data.countryCode.size() >= 2 && data.countryCode.size() <= 4 &&
+        data.flag is string && data.flag.size() >= 1 && data.flag.size() <= 12 &&
+        data.score is int && data.score >= 0 && data.score <= 100000000 &&
+        data.wave is int && data.wave >= 1 && data.wave <= 99 &&
+        data.kills is int && data.kills >= 0 && data.kills <= 100000 &&
+        data.headshots is int && data.headshots >= 0 && data.headshots <= data.kills &&
+        data.accuracy is int && data.accuracy >= 0 && data.accuracy <= 100 &&
+        data.survivalSec is int && data.survivalSec >= 0 && data.survivalSec <= 86400 &&
+        data.xpEarned is int && data.xpEarned >= 0 && data.xpEarned <= 10000000 &&
+        data.level is int && data.level >= 1 && data.level <= 999 &&
+        data.avatarColor is string && data.avatarColor.size() == 7 && data.avatarColor.matches('^#[0-9a-fA-F]{6}$') &&
+        data.favoriteWeapon is string && data.favoriteWeapon.size() >= 2 && data.favoriteWeapon.size() <= 48 &&
+        data.weekKey is string && data.weekKey.size() >= 6 && data.weekKey.size() <= 12 && data.weekKey.matches('^[0-9]{4}-W[0-9]{2}$') &&
+        data.isPlayer is bool && data.isPlayer == true &&
+        data.hasPin is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidOperativeAccount(data, pathUid) {
+      return data.keys().hasAll(['uid', 'primaryCallsign', 'pinHash', 'accentColor', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'primaryCallsign', 'pinHash', 'accentColor', 'createdAt', 'updatedAt']) &&
+        isValidUid(data.uid) &&
+        data.uid == pathUid &&
+        isValidCallsignKey(data.primaryCallsign) &&
+        data.pinHash is string && data.pinHash.size() <= 128 &&
+        data.accentColor is string && data.accentColor.size() == 7 && data.accentColor.matches('^#[0-9a-fA-F]{6}$') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Public Global Cloud Leaderboard (zero PII stored; single-field score index compatible)
+    match /leaderboard/{callsignKey} {
+      allow get: if isValidCallsignKey(callsignKey) && (resource == null || existing().score >= 0);
+      allow list: if existing().score >= 0;
+
+      allow create: if isVerifiedUser() &&
+        isValidCallsignKey(callsignKey) &&
+        isValidLeaderboardEntry(incoming(), callsignKey) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (incoming().ownerUid == request.auth.uid || isAdmin());
+
+      allow update: if isVerifiedUser() &&
+        isValidCallsignKey(callsignKey) &&
+        isValidLeaderboardEntry(incoming(), callsignKey) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().callsignKey == existing().callsignKey &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'callsign', 'countryCode', 'flag', 'score', 'wave', 'kills',
+          'headshots', 'accuracy', 'survivalSec', 'xpEarned', 'level',
+          'avatarColor', 'favoriteWeapon', 'weekKey', 'hasPin', 'updatedAt'
+        ]) &&
+        (
+          isAdmin() ||
+          (
+            existing().ownerUid == request.auth.uid &&
+            incoming().score >= existing().score
+          )
+        );
+
+      allow delete: if isVerifiedUser() &&
+        isValidCallsignKey(callsignKey) &&
+        (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    // Private Operative Account & Optional PIN Hash (strict owner isolation)
+    match /operatives/{uid} {
+      allow get: if isVerifiedUser() && isValidUid(uid) && request.auth.uid == uid;
+      allow list: if false;
+
+      allow create: if isVerifiedUser() &&
+        isValidUid(uid) &&
+        request.auth.uid == uid &&
+        isValidOperativeAccount(incoming(), uid) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidUid(uid) &&
+        request.auth.uid == uid &&
+        isValidOperativeAccount(incoming(), uid) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'primaryCallsign', 'pinHash', 'accentColor', 'updatedAt'
+        ]);
+
+      allow delete: if isVerifiedUser() && isValidUid(uid) && request.auth.uid == uid;
+    }
+
+    // Connection check doc
+    match /test/connection {
+      allow get: if isSignedIn();
+    }
+  }
+}

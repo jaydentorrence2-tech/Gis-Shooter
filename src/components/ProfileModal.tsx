@@ -1,16 +1,33 @@
 /**
  * Player Profile Dossier Side Drawer
- * Leaves left/center 3D viewport completely open so camera zoom-in highlights the Operator's helmet & visor.
+ * - Integrates Google Sign-In Cloud Identity & real-time Callsign ownership verification
+ * - Supports optional 4–6 digit Operative PIN protection stored privately in /operatives/{uid}
+ * - Leaves left/center 3D viewport completely open so camera zoom-in highlights the Operator's helmet & visor.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { getRankTitle, PlayerProfileData } from '../game/GameEngine';
-import { X, Check } from 'lucide-react';
+import { X, Check, Cloud, LogIn, LogOut, ShieldCheck, AlertTriangle, KeyRound } from 'lucide-react';
+import type { User } from 'firebase/auth';
+import {
+  type CallsignLookupResult,
+  hashOperativePin,
+  lookupCloudCallsign,
+  normalizeCallsignDisplay,
+  type OperativeAccountDoc,
+  saveOperativeAccount,
+  upsertCloudPersonalBest,
+} from '../firebase/cloudLeaderboard';
 
 interface ProfileModalProps {
   profile: PlayerProfileData;
+  cloudUser: User | null;
+  operativeAccount: OperativeAccountDoc | null;
+  onSignInGoogle: () => Promise<void>;
+  onSignOutGoogle: () => Promise<void>;
   onPreviewAccent: (hex: string) => void;
   onSave: (updated: Partial<PlayerProfileData>) => void;
+  onCloudAccountSaved?: (acc: OperativeAccountDoc) => void;
   onClose: () => void;
 }
 
@@ -25,13 +42,27 @@ const ACCENT_COLORS = [
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
   profile,
+  cloudUser,
+  operativeAccount,
+  onSignInGoogle,
+  onSignOutGoogle,
   onPreviewAccent,
   onSave,
+  onCloudAccountSaved,
   onClose,
 }) => {
   const [callsign, setCallsign] = useState(profile.callsign);
   const [selectedColor, setSelectedColor] = useState(profile.accentColor || '#06b6d4');
+  const [operativePin, setOperativePin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [cloudNotice, setCloudNotice] = useState('');
+  const [lookup, setLookup] = useState<CallsignLookupResult>({
+    status: 'checking',
+    callsignKey: profile.callsign,
+  });
 
   const accuracy =
     profile.totalShots > 0
@@ -47,6 +78,31 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const neededXp = profile.level * 250;
   const xpPercent = Math.min(100, Math.round((profile.xp / neededXp) * 100));
 
+  useEffect(() => {
+    let cancelled = false;
+    const trimmed = callsign.trim();
+    if (trimmed.length < 2) {
+      setLookup({ status: 'available', callsignKey: 'OPERATIVE' });
+      return;
+    }
+    setLookup((prev) => ({ ...prev, status: 'checking' }));
+    const timer = setTimeout(async () => {
+      try {
+        const res = await lookupCloudCallsign(trimmed, cloudUser?.uid ?? null);
+        if (!cancelled) setLookup(res);
+      } catch {
+        if (!cancelled) {
+          setLookup({ status: 'offline', callsignKey: trimmed.toUpperCase() });
+        }
+      }
+    }, 320);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [callsign, cloudUser?.uid]);
+
   const handlePickColor = (hex: string) => {
     setSelectedColor(hex);
     onPreviewAccent(hex);
@@ -57,23 +113,103 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     onClose();
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleGoogleAuth = async () => {
+    setAuthBusy(true);
+    setCloudNotice('');
+    try {
+      if (cloudUser) {
+        await onSignOutGoogle();
+      } else {
+        await onSignInGoogle();
+      }
+    } catch (err) {
+      setCloudNotice(err instanceof Error ? err.message : 'Google Sign-In failed.');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanCallsign = callsign.trim().toUpperCase() || 'OPERATIVE';
-    onSave({
-      callsign: cleanCallsign,
-      accentColor: selectedColor,
-    });
-    setSavedSuccess(true);
-    setTimeout(() => {
-      setSavedSuccess(false);
-      onClose();
-    }, 400);
+    setPinError('');
+    setCloudNotice('');
+    const cleanCallsign = normalizeCallsignDisplay(callsign);
+
+    if (cloudUser && lookup.status === 'owned_by_other') {
+      setCloudNotice(
+        `Callsign "${cleanCallsign}" belongs to another Google account. Pick another callsign or sign in as owner.`
+      );
+      return;
+    }
+
+    // If operative already has a PIN set and is changing primary callsign, require PIN verification
+    const hasExistingPin = Boolean(operativeAccount?.pinHash);
+    const changingCallsign =
+      operativeAccount &&
+      operativeAccount.primaryCallsign !== cleanCallsign.replace(/\s+/g, '_').replace(/[^A-Z0-9_\-]/g, '');
+
+    if (cloudUser && hasExistingPin && changingCallsign) {
+      if (!operativePin.trim()) {
+        setPinError('Enter your Operative PIN to authorize callsign change.');
+        return;
+      }
+      const enteredHash = await hashOperativePin(operativePin.trim(), cloudUser.uid);
+      if (enteredHash !== operativeAccount.pinHash) {
+        setPinError('Incorrect Operative PIN.');
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      onSave({
+        callsign: cleanCallsign,
+        accentColor: selectedColor,
+      });
+
+      if (cloudUser) {
+        const savedAcc = await saveOperativeAccount({
+          uid: cloudUser.uid,
+          callsign: cleanCallsign,
+          accentColor: selectedColor,
+          newPin: !hasExistingPin && operativePin.trim() ? operativePin.trim() : undefined,
+          keepExistingPin: true,
+        });
+        onCloudAccountSaved?.(savedAcc);
+
+        if (profile.highScore > 0) {
+          await upsertCloudPersonalBest(cloudUser, {
+            callsign: cleanCallsign,
+            score: profile.highScore,
+            wave: profile.highestWave || 1,
+            kills: profile.totalKills,
+            headshots: profile.totalHeadshots,
+            accuracy,
+            survivalSec: Math.max(60, (profile.highestWave || 1) * 55),
+            xpEarned: profile.xp,
+            level: profile.level,
+            avatarColor: selectedColor,
+            favoriteWeapon: 'AR-X7 Tactical',
+            hasPin: Boolean(savedAcc.pinHash),
+          });
+        }
+      }
+
+      setSavedSuccess(true);
+      setTimeout(() => {
+        setSavedSuccess(false);
+        onClose();
+      }, 420);
+    } catch (err) {
+      setCloudNotice(err instanceof Error ? err.message : 'Failed to sync cloud profile.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="absolute inset-0 z-40 flex justify-end p-4 md:p-6 pointer-events-none select-none">
-      <div className="max-w-md w-full h-full max-h-[680px] my-auto bg-[#131A26]/95 border border-slate-700/80 rounded-2xl p-6 shadow-2xl relative text-slate-100 flex flex-col justify-between pointer-events-auto overflow-y-auto">
+      <div className="max-w-md w-full h-full max-h-[720px] my-auto bg-[#131A26]/95 border border-slate-700/80 rounded-2xl p-6 shadow-2xl relative text-slate-100 flex flex-col justify-between pointer-events-auto overflow-y-auto">
         <div>
           <button
             onClick={handleCancel}
@@ -84,7 +220,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
 
           {/* Operative Header */}
-          <div className="flex items-center gap-3.5 mb-5">
+          <div className="flex items-center gap-3.5 mb-4">
             <div
               className="w-11 h-11 rounded-xl flex items-center justify-center font-display font-bold text-slate-950 text-lg shrink-0"
               style={{ backgroundColor: selectedColor }}
@@ -101,8 +237,51 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             </div>
           </div>
 
+          {/* Cloud Identity Card */}
+          <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3.5 mb-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Cloud
+                  className={`w-4 h-4 shrink-0 ${
+                    cloudUser ? 'text-emerald-400' : 'text-slate-500'
+                  }`}
+                />
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white truncate">
+                    {cloudUser ? cloudUser.displayName || 'Google Operative' : 'Cloud Sync Offline'}
+                  </div>
+                  <div className="text-[11px] font-mono-tech text-slate-400 truncate">
+                    {cloudUser
+                      ? cloudUser.email || 'Verified Cloud Account'
+                      : 'Sign in with Google to sync global scores'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={authBusy}
+                onClick={handleGoogleAuth}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50 ${
+                  cloudUser
+                    ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                    : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold'
+                }`}
+              >
+                {cloudUser ? (
+                  <>
+                    <LogOut className="w-3.5 h-3.5" /> Sign Out
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-3.5 h-3.5" /> Sign In
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
           <form id="profile-form" onSubmit={handleSave}>
-            {/* Callsign */}
+            {/* Callsign + Real-time Cloud Ownership Check */}
             <div className="mb-4">
               <label className="block text-xs font-medium text-slate-300 mb-1.5">
                 Operative Callsign
@@ -115,7 +294,73 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 className="w-full px-4 py-2.5 rounded-xl bg-[#0C1017] border border-slate-700 text-cyan-300 font-mono-tech font-bold tracking-wider focus:outline-none focus:border-cyan-400 transition"
                 placeholder="Enter callsign..."
               />
+              <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-mono-tech">
+                {lookup.status === 'checking' && (
+                  <span className="text-slate-400">Checking global callsign registry...</span>
+                )}
+                {lookup.status === 'available' && (
+                  <span className="text-emerald-400 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                    Available · Unclaimed global callsign
+                  </span>
+                )}
+                {lookup.status === 'owned_by_you' && (
+                  <span className="text-cyan-400 flex items-center gap-1 tabular-nums">
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                    Verified Owner · Cloud PB: {(lookup.existingScore ?? 0).toLocaleString()}
+                  </span>
+                )}
+                {lookup.status === 'owned_by_other' && (
+                  <span className="text-rose-400 flex items-center gap-1 tabular-nums">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    Registered by another account (PB: {(lookup.existingScore ?? 0).toLocaleString()})
+                  </span>
+                )}
+                {lookup.status === 'offline' && (
+                  <span className="text-slate-500">Local mode · Cloud check unavailable</span>
+                )}
+              </div>
             </div>
+
+            {/* Optional Operative PIN */}
+            {cloudUser && (
+              <div className="mb-4">
+                <label className="flex items-center justify-between text-xs font-medium text-slate-300 mb-1.5">
+                  <span className="flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                    Operative PIN {operativeAccount?.pinHash ? '(Configured)' : '(Optional)'}
+                  </span>
+                  <span className="text-[10px] font-mono-tech text-slate-400">
+                    {operativeAccount?.pinHash ? 'Required if changing callsign' : '4–8 digits'}
+                  </span>
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={8}
+                  value={operativePin}
+                  onChange={(e) => {
+                    setOperativePin(e.target.value);
+                    if (pinError) setPinError('');
+                  }}
+                  placeholder={
+                    operativeAccount?.pinHash
+                      ? 'Enter PIN to confirm callsign change'
+                      : 'Optional PIN for profile verification'
+                  }
+                  className="w-full px-4 py-2 rounded-xl bg-[#0C1017] border border-slate-700 text-amber-300 font-mono-tech text-xs tracking-widest focus:outline-none focus:border-amber-400 transition"
+                />
+                {pinError && (
+                  <div className="mt-1.5 text-[11px] font-mono-tech text-rose-400">{pinError}</div>
+                )}
+              </div>
+            )}
+
+            {cloudNotice && (
+              <div className="mb-3 p-2.5 rounded-lg bg-rose-950/50 border border-rose-500/40 text-[11px] font-mono-tech text-rose-200">
+                {cloudNotice}
+              </div>
+            )}
 
             {/* Visor Color */}
             <div className="mb-4">
@@ -143,7 +388,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
             {/* XP Progress */}
             <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3.5 mb-4">
-              <div className="flex justify-between items-center text-xs font-mono-tech mb-2">
+              <div className="flex justify-between items-center text-xs font-mono-tech mb-2 tabular-nums">
                 <span className="font-bold text-slate-200">{rankTitle}</span>
                 <span className="text-slate-400">
                   {profile.xp} / {neededXp} XP ({xpPercent}%)
@@ -161,28 +406,28 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3">
                 <div className="text-[11px] text-slate-400">Total Kills</div>
-                <div className="text-base font-mono-tech font-bold text-white mt-0.5">
+                <div className="text-base font-mono-tech font-bold text-white mt-0.5 tabular-nums">
                   {profile.totalKills}
                 </div>
               </div>
 
               <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3">
                 <div className="text-[11px] text-slate-400">Headshot Ratio</div>
-                <div className="text-base font-mono-tech font-bold text-amber-400 mt-0.5">
+                <div className="text-base font-mono-tech font-bold text-amber-400 mt-0.5 tabular-nums">
                   {headshotRatio}%
                 </div>
               </div>
 
               <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3">
                 <div className="text-[11px] text-slate-400">Accuracy</div>
-                <div className="text-base font-mono-tech font-bold text-cyan-400 mt-0.5">
+                <div className="text-base font-mono-tech font-bold text-cyan-400 mt-0.5 tabular-nums">
                   {accuracy}%
                 </div>
               </div>
 
               <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3">
                 <div className="text-[11px] text-slate-400">High Score · Best Wave</div>
-                <div className="text-base font-mono-tech font-bold text-emerald-400 mt-0.5">
+                <div className="text-base font-mono-tech font-bold text-emerald-400 mt-0.5 tabular-nums">
                   {profile.highScore.toLocaleString()} · W{profile.highestWave}
                 </div>
               </div>
@@ -190,7 +435,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
             {/* Special Achievements */}
             <div className="bg-[#0C1017] border border-slate-800 rounded-xl p-3.5 mb-3">
-              <div className="flex items-center justify-between text-xs font-mono-tech mb-2">
+              <div className="flex items-center justify-between text-xs font-mono-tech mb-2 tabular-nums">
                 <span className="font-bold text-slate-200 uppercase tracking-wider">Special Achievements</span>
                 <span className="text-slate-400">Boss Kills: {profile.bossDefeatedCount || 0}</span>
               </div>
@@ -213,10 +458,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                       </div>
                     </div>
                     <span
-                      className={`text-[10px] font-mono-tech font-bold px-2 py-0.5 rounded border shrink-0 ${
-                        unlocked
-                          ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-300'
-                          : 'bg-slate-900 border-slate-700 text-slate-500'
+                      className={`text-[10px] font-mono-tech font-bold shrink-0 ${
+                        unlocked ? 'text-emerald-300' : 'text-slate-500'
                       }`}
                     >
                       {unlocked ? 'UNLOCKED' : 'LOCKED'}
@@ -232,19 +475,22 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <button
             type="button"
             onClick={handleCancel}
-            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition cursor-pointer whitespace-nowrap shrink-0"
           >
             Cancel
           </button>
           <button
             type="submit"
             form="profile-form"
-            className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition cursor-pointer"
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition cursor-pointer whitespace-nowrap"
           >
             {savedSuccess ? (
               <>
                 <Check className="w-4 h-4 stroke-[3]" /> Saved
               </>
+            ) : saving ? (
+              'Syncing...'
             ) : (
               'Save Profile'
             )}

@@ -22,11 +22,13 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import type { AdminCheatsState, GameState, PlayerProfileData } from '../game/GameEngine';
+import type { User } from 'firebase/auth';
 import {
   addOrUpdateCustomScore,
   banOrRemoveLeaderboardEntry,
   clearAllModerationFilters,
   getMergedLeaderboard,
+  type LeaderboardEntry,
   LeaderboardTab,
   loadBannedCallsigns,
   unbanCallsign,
@@ -43,6 +45,10 @@ interface AdminPanelModalProps {
   onClose: () => void;
   gameState: GameState | null;
   profile: PlayerProfileData;
+  cloudEntries: LeaderboardEntry[];
+  cloudUser: User | null;
+  onCloudAdminSaveScore: (entry: LeaderboardEntry) => Promise<void>;
+  onCloudAdminDelete: (id: string, callsign: string) => Promise<void>;
   onSkipWave: () => void;
   onSummonBoss: () => void;
   onKillAllHostiles: () => number;
@@ -57,6 +63,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onClose,
   gameState,
   profile,
+  cloudEntries,
+  cloudUser,
+  onCloudAdminSaveScore,
+  onCloudAdminDelete,
   onSkipWave,
   onSummonBoss,
   onKillAllHostiles,
@@ -114,8 +124,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   };
 
   const board = useMemo(
-    () => getMergedLeaderboard(boardTab, profile.callsign),
-    [boardTab, profile.callsign, boardRevision]
+    () => getMergedLeaderboard(boardTab, profile.callsign, cloudEntries),
+    [boardTab, profile.callsign, cloudEntries, boardRevision]
   );
 
   const bannedList = useMemo(() => loadBannedCallsigns(), [boardRevision]);
@@ -582,7 +592,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             <div className="space-y-5">
               {/* Add Custom Score Form */}
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const entry = addOrUpdateCustomScore({
                     callsign: customCallsign,
@@ -592,6 +602,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     accuracy: Number(customAcc) || 0,
                   });
                   setBoardRevision((r) => r + 1);
+                  if (cloudUser) {
+                    try {
+                      await onCloudAdminSaveScore(entry);
+                      notify(`Saved custom score for ${entry.callsign} (${entry.score.toLocaleString()}) to Cloud & Local.`);
+                      return;
+                    } catch {
+                      // fallback notice below
+                    }
+                  }
                   notify(`Saved custom score for ${entry.callsign} (${entry.score.toLocaleString()}).`);
                 }}
                 className="bg-[#0C1017] border border-slate-800 rounded-xl p-4 space-y-3"
@@ -730,9 +749,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                             </td>
                             <td className="py-2 px-3 font-mono-tech font-semibold text-white">
                               {row.flag} {row.callsign}
-                              {row.isPlayer && (
+                              {row.isCloud ? (
+                                <span className="ml-2 text-[10px] text-emerald-400">CLOUD</span>
+                              ) : row.isPlayer ? (
                                 <span className="ml-2 text-[10px] text-cyan-400">LOCAL</span>
-                              )}
+                              ) : null}
                             </td>
                             <td className="py-2 px-3 text-right font-mono-tech text-slate-300 tabular-nums">
                               W{row.wave}
@@ -743,9 +764,16 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                             <td className="py-2 px-3 text-right">
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   banOrRemoveLeaderboardEntry(row.id, row.callsign, true);
                                   setBoardRevision((r) => r + 1);
+                                  if (row.isCloud && cloudUser) {
+                                    try {
+                                      await onCloudAdminDelete(row.id, row.callsign);
+                                    } catch {
+                                      // local ban filter still hides it
+                                    }
+                                  }
                                   notify(`Banned & removed ${row.callsign}.`);
                                 }}
                                 className="px-2.5 py-1 rounded-md bg-rose-950/70 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/40 text-[11px] font-semibold inline-flex items-center gap-1 transition cursor-pointer whitespace-nowrap shrink-0"
