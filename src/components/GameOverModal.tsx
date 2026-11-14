@@ -10,6 +10,7 @@ import { formatSurvivalTime } from '../game/leaderboard';
 import { RotateCcw, Home, Skull, Trophy, Upload, CheckCircle2, Cloud, LogIn } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import type { CloudUpsertResult } from '../firebase/cloudLeaderboard';
+import { AuthErrorNotice } from './AuthErrorNotice';
 
 interface GameOverModalProps {
   state: GameState;
@@ -38,6 +39,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   onReturnToMenu,
 }) => {
   const [syncBusy, setSyncBusy] = useState(false);
+  const [authError, setAuthError] = useState<unknown>(null);
   const accuracy =
     state.sessionShots > 0
       ? Math.min(100, Math.round((state.sessionHits / state.sessionShots) * 100))
@@ -45,8 +47,11 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
   const handleSignInSync = async () => {
     setSyncBusy(true);
+    setAuthError(null);
     try {
       await onSignInAndSync();
+    } catch (err) {
+      setAuthError(err);
     } finally {
       setSyncBusy(false);
     }
@@ -157,6 +162,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                   {syncBusy ? 'Signing In...' : 'Sign In with Google & Sync to Global Cloud'}
                 </button>
               )}
+
+              {authError !== null && <AuthErrorNotice error={authError} />}
             </div>
           )}
 

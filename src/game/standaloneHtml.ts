@@ -487,6 +487,7 @@ export function generateStandaloneHtml(): string {
         <div id="lb-tabs" class="lb-tabs"></div>
         <div id="lb-summary" class="font-mono" style="font-size:12px;color:#cbd5e1;"></div>
       </div>
+      <div id="lb-auth-err" class="font-mono" style="display:none;margin:10px 24px 0;padding:10px 12px;border-radius:10px;background:rgba(136,19,55,0.45);border:1px solid rgba(244,63,94,0.45);color:#fecdd3;font-size:11px;line-height:1.5;"></div>
       <div id="lb-body" style="flex:1;overflow-y:auto;padding:8px 24px 16px;"></div>
       <div style="padding:12px 24px;border-top:1px solid #1e293b;background:#0B101B;display:flex;justify-content:space-between;align-items:center;gap:12px;">
         <span id="lb-foot-note" class="font-mono" style="font-size:11px;color:#64748b;">Local scores persist in browser storage</span>
@@ -683,8 +684,24 @@ export function generateStandaloneHtml(): string {
       return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
     };
     const notifyUpdate = () => window.dispatchEvent(new CustomEvent('gis-cloud-update'));
+    const formatAuthErr = (err) => {
+      const code = (err && err.code) ? String(err.code) : '';
+      const raw = (err && err.message) ? String(err.message) : String(err || 'Google Sign-In failed.');
+      const host = window.location.hostname || 'domain ini';
+      if (code === 'auth/unauthorized-domain' || raw.includes('unauthorized-domain')) {
+        return new Error('Domain "' + host + '" belum terdaftar di Firebase Authorized Domains. Tambahkan "' + host + '" di Firebase Console -> Authentication -> Settings -> Authorized domains (https://console.firebase.google.com/project/' + cfg.projectId + '/authentication/settings).');
+      }
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        return new Error('Popup login Google ditutup sebelum selesai. Klik Sign In lagi.');
+      }
+      if (code === 'auth/network-request-failed') {
+        return new Error('Koneksi jaringan gagal saat menghubungi Google Auth.');
+      }
+      return new Error(raw);
+    };
 
     try { await fsMod.getDocFromServer(fsMod.doc(db, 'test', 'connection')); } catch(e) {}
+    try { await authMod.getRedirectResult(auth); } catch(e) {}
 
     authMod.onAuthStateChanged(auth, async (u) => {
       window.__GIS_CLOUD__.user = u || null;
@@ -740,10 +757,20 @@ export function generateStandaloneHtml(): string {
 
     window.__GIS_CLOUD__.hashPin = hashPin;
     window.__GIS_CLOUD__.signIn = async () => {
-      const r = await authMod.signInWithPopup(auth, provider);
-      window.__GIS_CLOUD__.user = r.user;
-      notifyUpdate();
-      return r.user;
+      if (document.pointerLockElement) { try { document.exitPointerLock(); } catch(e) {} }
+      try {
+        const r = await authMod.signInWithPopup(auth, provider);
+        window.__GIS_CLOUD__.user = r.user;
+        notifyUpdate();
+        return r.user;
+      } catch(err) {
+        const code = (err && err.code) ? String(err.code) : '';
+        if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+          try { await authMod.signInWithRedirect(auth, provider); } catch(re) { throw formatAuthErr(re); }
+          throw new Error('Popup diblokir browser — mengalihkan ke halaman login Google...');
+        }
+        throw formatAuthErr(err);
+      }
     };
     window.__GIS_CLOUD__.signOut = async () => {
       await authMod.signOut(auth);
@@ -3163,7 +3190,14 @@ export function generateStandaloneHtml(): string {
     }
     window.setLbTab = t => { lbTab = t; closeOpProfile(); renderLeaderboard(); };
     document.getElementById('lb-google-btn').onclick = async () => {
-      try { await window.__GIS_CLOUD__.signIn(); renderLeaderboard(); } catch(e) {}
+      const errBox = document.getElementById('lb-auth-err');
+      if (errBox) errBox.style.display = 'none';
+      try {
+        await window.__GIS_CLOUD__.signIn();
+        renderLeaderboard();
+      } catch(e) {
+        if (errBox) { errBox.innerText = (e && e.message) ? e.message : 'Google Sign-In failed.'; errBox.style.display = 'block'; }
+      }
     };
     window.addEventListener('gis-cloud-update', () => {
       if (document.getElementById('modal-leaderboard').style.display === 'flex') renderLeaderboard();
@@ -3237,12 +3271,14 @@ export function generateStandaloneHtml(): string {
         let html = '<div class="card" style="background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.45);padding:10px 14px;font-size:12px;color:#6ee7b7;font-weight:700;text-align:left;">' +
           '<div>Score Logged · Rank #'+(state.subRank||'—')+' · Level '+profile.level+'</div>' +
           (cloudSyncMsg ? '<div class="font-mono" style="font-size:11px;color:#94a3b8;margin-top:4px;font-weight:500;">'+cloudSyncMsg+'</div>' : '') +
-          (cloudSyncStatus === 'auth_required' ? '<button id="btn-go-cloud-signin" class="btn-sec" style="width:100%;margin-top:8px;color:#67e8f9;border-color:rgba(6,182,212,0.45);">Sign In with Google &amp; Sync to Global Cloud</button>' : '') +
+          (cloudSyncStatus === 'auth_required' ? '<button id="btn-go-cloud-signin" class="btn-sec" style="width:100%;margin-top:8px;color:#67e8f9;border-color:rgba(6,182,212,0.45);">Sign In with Google &amp; Sync to Global Cloud</button><div id="go-auth-err" class="font-mono" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(136,19,55,0.5);border:1px solid rgba(244,63,94,0.45);color:#fecdd3;font-size:11px;line-height:1.45;"></div>' : '') +
         '</div>';
         sw.innerHTML = html;
         const gBtn = document.getElementById('btn-go-cloud-signin');
         if (gBtn) {
           gBtn.onclick = async () => {
+            const errBox = document.getElementById('go-auth-err');
+            if (errBox) errBox.style.display = 'none';
             try {
               await cl.signIn();
               if (lastSavedMatchRec) {
@@ -3250,7 +3286,9 @@ export function generateStandaloneHtml(): string {
                 const res = await cl.upsertScore(lastSavedMatchRec);
                 cloudSyncStatus = res.status; cloudSyncMsg = res.message; renderGameOver();
               }
-            } catch(e) {}
+            } catch(e) {
+              if (errBox) { errBox.innerText = (e && e.message) ? e.message : 'Google Sign-In failed.'; errBox.style.display = 'block'; }
+            }
           };
         }
       }

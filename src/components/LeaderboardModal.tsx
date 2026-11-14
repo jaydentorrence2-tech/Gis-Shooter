@@ -17,6 +17,7 @@ import {
   resolveOperatorProfileDetails,
 } from '../game/leaderboard';
 import type { PlayerProfileData } from '../game/GameEngine';
+import { AuthErrorNotice } from './AuthErrorNotice';
 
 interface LeaderboardModalProps {
   activeCallsign: string;
@@ -48,6 +49,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   const [activeTab, setActiveTab] = useState<LeaderboardTab>(initialTab);
   const [selectedRow, setSelectedRow] = useState<RankedLeaderboardRow | null>(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [authError, setAuthError] = useState<unknown>(null);
 
   const board = useMemo(
     () => getMergedLeaderboard(activeTab, activeCallsign, cloudEntries),
@@ -77,8 +79,11 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   const handleQuickSignIn = async () => {
     if (!onSignInGoogle) return;
     setSigningIn(true);
+    setAuthError(null);
     try {
       await onSignInGoogle();
+    } catch (err) {
+      setAuthError(err);
     } finally {
       setSigningIn(false);
     }
@@ -206,6 +211,12 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             </span>
           </div>
         </div>
+
+        {authError !== null && (
+          <div className="px-6 pt-3 shrink-0">
+            <AuthErrorNotice error={authError} />
+          </div>
+        )}
 
         {/* Scrollable Rankings Table */}
         <div className="flex-1 overflow-y-auto px-6 py-3">

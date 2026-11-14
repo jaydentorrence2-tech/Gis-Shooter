@@ -18,6 +18,7 @@ import {
   saveOperativeAccount,
   upsertCloudPersonalBest,
 } from '../firebase/cloudLeaderboard';
+import { AuthErrorNotice } from './AuthErrorNotice';
 
 interface ProfileModalProps {
   profile: PlayerProfileData;
@@ -58,7 +59,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [authBusy, setAuthBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [cloudNotice, setCloudNotice] = useState('');
+  const [cloudNotice, setCloudNotice] = useState<unknown>(null);
   const [lookup, setLookup] = useState<CallsignLookupResult>({
     status: 'checking',
     callsignKey: profile.callsign,
@@ -115,7 +116,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   const handleGoogleAuth = async () => {
     setAuthBusy(true);
-    setCloudNotice('');
+    setCloudNotice(null);
     try {
       if (cloudUser) {
         await onSignOutGoogle();
@@ -123,7 +124,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         await onSignInGoogle();
       }
     } catch (err) {
-      setCloudNotice(err instanceof Error ? err.message : 'Google Sign-In failed.');
+      setCloudNotice(err);
     } finally {
       setAuthBusy(false);
     }
@@ -132,7 +133,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinError('');
-    setCloudNotice('');
+    setCloudNotice(null);
     const cleanCallsign = normalizeCallsignDisplay(callsign);
 
     if (cloudUser && lookup.status === 'owned_by_other') {
@@ -356,11 +357,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </div>
             )}
 
-            {cloudNotice && (
-              <div className="mb-3 p-2.5 rounded-lg bg-rose-950/50 border border-rose-500/40 text-[11px] font-mono-tech text-rose-200">
-                {cloudNotice}
-              </div>
-            )}
+            {cloudNotice !== null && <AuthErrorNotice error={cloudNotice} className="mb-3" />}
 
             {/* Visor Color */}
             <div className="mb-4">
