@@ -225,12 +225,16 @@ export class EnemyBot {
     this.group.add(this.healthBarMesh);
   }
 
-  public takeDamage(dmg: number, isHeadshot = false): { isDead: boolean; isHeadshot: boolean } {
+  public takeDamage(
+    dmg: number,
+    isHeadshot = false,
+    headshotMultiplier = 2.5
+  ): { isDead: boolean; isHeadshot: boolean; actualDmg: number } {
     if (this.isDead || this.state === 'dying') {
-      return { isDead: true, isHeadshot };
+      return { isDead: true, isHeadshot, actualDmg: 0 };
     }
 
-    const actualDmg = isHeadshot ? Math.round(dmg * 2.5) : dmg;
+    const actualDmg = isHeadshot ? Math.round(dmg * headshotMultiplier) : dmg;
     this.health -= actualDmg;
     this.hitFlashTimer = 0.14;
 
@@ -250,10 +254,10 @@ export class EnemyBot {
       this.state = 'dying';
       this.healthBarMesh.visible = false;
       soundSystem.playEnemyKilled();
-      return { isDead: true, isHeadshot };
+      return { isDead: true, isHeadshot, actualDmg };
     }
 
-    return { isDead: false, isHeadshot };
+    return { isDead: false, isHeadshot, actualDmg };
   }
 
   public stun(duration: number) {

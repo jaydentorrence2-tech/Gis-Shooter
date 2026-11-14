@@ -346,12 +346,16 @@ export class BossSpecialist {
     this.bodyPivot.add(this.rightLegPivot);
   }
 
-  public takeDamage(dmg: number, zone: BossHitZone): { isDead: boolean; isCrit: boolean; actualDmg: number } {
+  public takeDamage(
+    dmg: number,
+    zone: BossHitZone,
+    headMultiplier = 2.0
+  ): { isDead: boolean; isCrit: boolean; actualDmg: number } {
     if (this.isDead || this.isDying) {
       return { isDead: true, isCrit: zone !== 'body', actualDmg: 0 };
     }
 
-    const mult = zone === 'weakspot' ? 2.2 : zone === 'head' ? 2.0 : 1.0;
+    const mult = zone === 'weakspot' ? Math.max(2.2, headMultiplier) : zone === 'head' ? headMultiplier : 1.0;
     const actualDmg = Math.round(dmg * mult);
     this.health = Math.max(0, this.health - actualDmg);
     this.hitFlashTimer = 0.12;

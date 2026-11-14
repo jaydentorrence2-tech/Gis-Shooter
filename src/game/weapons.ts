@@ -21,6 +21,7 @@ export interface WeaponDef {
   type: WeaponType;
   slot: number;
   damage: number;
+  headshotMultiplier?: number;
   pellets?: number;
   fireRate: number;
   magSize: number;
@@ -43,7 +44,7 @@ export const INITIAL_WEAPONS: WeaponDef[] = [
     shortName: 'AR-X7',
     type: 'rifle',
     slot: 1,
-    damage: 32,
+    damage: 38,
     fireRate: 0.105,
     magSize: 30,
     maxReserve: 150,
@@ -64,7 +65,7 @@ export const INITIAL_WEAPONS: WeaponDef[] = [
     shortName: 'VECTOR-V9',
     type: 'smg',
     slot: 2,
-    damage: 21,
+    damage: 28,
     fireRate: 0.062,
     magSize: 36,
     maxReserve: 180,
@@ -85,7 +86,7 @@ export const INITIAL_WEAPONS: WeaponDef[] = [
     shortName: 'SG-12',
     type: 'shotgun',
     slot: 3,
-    damage: 19,
+    damage: 22,
     pellets: 8,
     fireRate: 0.78,
     magSize: 8,
@@ -107,7 +108,7 @@ export const INITIAL_WEAPONS: WeaponDef[] = [
     shortName: 'SR-50',
     type: 'sniper',
     slot: 4,
-    damage: 95,
+    damage: 120,
     fireRate: 1.05,
     magSize: 5,
     maxReserve: 25,
@@ -128,7 +129,8 @@ export const INITIAL_WEAPONS: WeaponDef[] = [
     shortName: '.50 PYTHON',
     type: 'pistol',
     slot: 5,
-    damage: 58,
+    damage: 65,
+    headshotMultiplier: 3.0,
     fireRate: 0.34,
     magSize: 7,
     maxReserve: 42,

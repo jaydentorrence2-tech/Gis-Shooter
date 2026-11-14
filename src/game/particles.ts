@@ -38,6 +38,17 @@ interface ShellCasing {
   active: boolean;
 }
 
+interface FloatingDamage {
+  sprite: THREE.Sprite;
+  tex: THREE.CanvasTexture;
+  mat: THREE.SpriteMaterial;
+  velocity: THREE.Vector3;
+  life: number;
+  maxLife: number;
+  baseScaleX: number;
+  baseScaleY: number;
+}
+
 export class ParticleSystem {
   private scene: THREE.Scene;
 
@@ -67,6 +78,10 @@ export class ParticleSystem {
   private decalCursor = 0;
   private decalGeo: THREE.PlaneGeometry;
   private decalMat: THREE.MeshBasicMaterial;
+
+  // 5. World-Space Floating Damage Numbers
+  private floatingDamages: FloatingDamage[] = [];
+  private maxFloatingDamages = 28;
 
   // Scratch vectors (zero GC in loop)
   private _p1 = new THREE.Vector3();
@@ -431,6 +446,80 @@ export class ParticleSystem {
     requestAnimationFrame(tick);
   }
 
+  public addFloatingDamage(pos: THREE.Vector3, amount: number, isCrit: boolean) {
+    if (amount <= 0) return;
+    if (this.floatingDamages.length >= this.maxFloatingDamages) {
+      const oldest = this.floatingDamages.shift();
+      if (oldest) {
+        this.scene.remove(oldest.sprite);
+        oldest.tex.dispose();
+        oldest.mat.dispose();
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    const label = isCrit ? `${Math.round(amount)}!` : `${Math.round(amount)}`;
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = isCrit
+      ? '900 72px "JetBrains Mono", monospace'
+      : '800 54px "JetBrains Mono", monospace';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = isCrit ? 11 : 8;
+    ctx.strokeStyle = isCrit ? 'rgba(69, 10, 10, 0.96)' : 'rgba(2, 6, 23, 0.92)';
+    ctx.strokeText(label, 128, 64);
+
+    if (isCrit) {
+      const grad = ctx.createLinearGradient(0, 24, 0, 104);
+      grad.addColorStop(0, '#fef08a');
+      grad.addColorStop(0.55, '#facc15');
+      grad.addColorStop(1, '#ef4444');
+      ctx.fillStyle = grad;
+    } else {
+      ctx.fillStyle = '#ffffff';
+    }
+    ctx.fillText(label, 128, 64);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.position.set(
+      pos.x + (Math.random() - 0.5) * 0.24,
+      pos.y + 0.16,
+      pos.z + (Math.random() - 0.5) * 0.24
+    );
+    const baseScaleX = isCrit ? 1.55 : 1.05;
+    const baseScaleY = isCrit ? 0.78 : 0.52;
+    sprite.scale.set(baseScaleX, baseScaleY, 1);
+    sprite.renderOrder = 1000;
+    this.scene.add(sprite);
+
+    this.floatingDamages.push({
+      sprite,
+      tex,
+      mat,
+      velocity: new THREE.Vector3(
+        (Math.random() - 0.5) * 0.65,
+        isCrit ? 2.15 : 1.65,
+        (Math.random() - 0.5) * 0.65
+      ),
+      life: 0,
+      maxLife: isCrit ? 0.8 : 0.65,
+      baseScaleX,
+      baseScaleY,
+    });
+  }
+
   public update(delta: number) {
     // 1. Tracers
     for (let i = 0; i < this.tracers.length; i++) {
@@ -532,6 +621,26 @@ export class ParticleSystem {
         s.angVel.multiplyScalar(0.5);
       }
     }
+
+    // 4. Floating Damage Numbers
+    for (let i = this.floatingDamages.length - 1; i >= 0; i--) {
+      const fd = this.floatingDamages[i];
+      fd.life += delta;
+      if (fd.life >= fd.maxLife) {
+        this.scene.remove(fd.sprite);
+        fd.tex.dispose();
+        fd.mat.dispose();
+        this.floatingDamages.splice(i, 1);
+        continue;
+      }
+
+      const t = fd.life / fd.maxLife;
+      fd.velocity.y = Math.max(0.45, fd.velocity.y - delta * 1.4);
+      fd.sprite.position.addScaledVector(fd.velocity, delta);
+      const pop = t < 0.16 ? 0.85 + (t / 0.16) * 0.35 : 1.2 - (t - 0.16) * 0.26;
+      fd.sprite.scale.set(fd.baseScaleX * pop, fd.baseScaleY * pop, 1);
+      fd.mat.opacity = t < 0.6 ? 1 : Math.max(0, 1 - (t - 0.6) / 0.4);
+    }
   }
 
   public dispose() {
@@ -548,6 +657,13 @@ export class ParticleSystem {
     this.decals.forEach((d) => this.scene.remove(d));
     this.decalGeo.dispose();
     this.decalMat.dispose();
+
+    this.floatingDamages.forEach((fd) => {
+      this.scene.remove(fd.sprite);
+      fd.tex.dispose();
+      fd.mat.dispose();
+    });
+    this.floatingDamages = [];
 
     this.scene.remove(this.particlePoints);
     this.particleGeo.dispose();

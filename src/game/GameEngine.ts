@@ -227,6 +227,8 @@ export class GameEngine {
   private recoilZ = 0;
   private boltKick = 0;
   private pumpAnim = 0;
+  private screenShakeIntensity = 0;
+  private screenShakePhase = 0;
   private walkBobCycle = 0;
   private reloadProgress = 0;
   private isReloading = false;
@@ -1033,6 +1035,7 @@ export class GameEngine {
         const dmg = Math.max(25, Math.round(maxDmg * falloff));
         const res = bot.takeDamage(dmg, false);
         hitAny = true;
+        this.particles.addFloatingDamage(botCenter, res.actualDmg, false);
         if (res.isDead) {
           this.handleEnemyEliminated(bot, false, 'FLASH-FRAG');
         } else {
@@ -1049,6 +1052,7 @@ export class GameEngine {
         const dmg = Math.max(40, Math.round(maxDmg * 1.15 * falloff));
         const res = this.boss.takeDamage(dmg, 'body');
         hitAny = true;
+        this.particles.addFloatingDamage(bossCenter, res.actualDmg, false);
         if (res.isDead) {
           this.handleBossDefeated('FLASH-FRAG');
         } else {
@@ -1061,8 +1065,11 @@ export class GameEngine {
       this.triggerHitmarker(false);
     }
 
-    // Subtle self concussion glare if detonated close to player
+    // Subtle self concussion glare & blast tremor if detonated close to player
     const pDist = this.playerPos.distanceTo(pos);
+    if (pDist < 14.0) {
+      this.screenShakeIntensity = Math.max(this.screenShakeIntensity, (1 - pDist / 14.0) * 0.08);
+    }
     if (pDist < 7.0) {
       this.state.flashbangGlare = Math.max(this.state.flashbangGlare, (1 - pDist / 7.0) * 0.65);
     }
@@ -1193,28 +1200,33 @@ export class GameEngine {
     this.profile.totalShots += shotsFired;
     this.state.sessionShots += shotsFired;
 
-    // Weapon-specific SFX & Recoil
+    // Weapon-specific SFX, Recoil & Micro Screen Shake
     if (wep.type === 'shotgun') {
       soundSystem.playShotgunBlast();
       this.recoilPitch = 0.16;
       this.recoilZ = 0.13;
       this.pumpAnim = 1.0;
+      this.screenShakeIntensity = Math.max(this.screenShakeIntensity, 0.065);
     } else if (wep.type === 'sniper') {
       soundSystem.playSniperShot();
       this.recoilPitch = 0.19;
       this.recoilZ = 0.14;
+      this.screenShakeIntensity = Math.max(this.screenShakeIntensity, 0.058);
     } else if (wep.type === 'smg') {
       soundSystem.playSmgShot();
       this.recoilPitch = 0.036;
       this.recoilZ = 0.034;
+      this.screenShakeIntensity = Math.max(this.screenShakeIntensity, 0.008);
     } else if (wep.type === 'pistol') {
       soundSystem.playMagnumShot();
       this.recoilPitch = 0.145;
       this.recoilZ = 0.11;
+      this.screenShakeIntensity = Math.max(this.screenShakeIntensity, 0.046);
     } else {
       soundSystem.playRifleShot();
       this.recoilPitch = 0.055;
       this.recoilZ = 0.048;
+      this.screenShakeIntensity = Math.max(this.screenShakeIntensity, 0.012);
     }
 
     // Muzzle Flash & Shell Casing Ejection
@@ -1274,6 +1286,9 @@ export class GameEngine {
     const tracerColor = wep.type === 'shotgun' ? 0xf59e0b : wep.type === 'sniper' ? 0x38bdf8 : 0x06b6d4;
 
     let hitCount = 0;
+    const damageAgg = new Map<object, { dmg: number; isCrit: boolean; pos: THREE.Vector3 }>();
+    const headMult = wep.headshotMultiplier ?? 2.5;
+    const bossHeadMult = wep.headshotMultiplier ?? 2.0;
 
     for (let p = 0; p < pellets; p++) {
       this._spreadDir.copy(this._camDir);
@@ -1331,7 +1346,15 @@ export class GameEngine {
 
         if (hitBoss && this.boss && !this.boss.isDead) {
           hitCount++;
-          const res = this.boss.takeDamage(wep.damage, bossZone);
+          const res = this.boss.takeDamage(wep.damage, bossZone, bossHeadMult);
+          const prev = damageAgg.get(this.boss);
+          if (prev) {
+            prev.dmg += res.actualDmg;
+            prev.isCrit = prev.isCrit || res.isCrit;
+            if (res.isCrit) prev.pos.copy(hitPoint);
+          } else {
+            damageAgg.set(this.boss, { dmg: res.actualDmg, isCrit: res.isCrit, pos: hitPoint.clone() });
+          }
           this.triggerHitmarker(res.isCrit);
           this.particles.addImpactSparks(hitPoint, this._worldNormal, true);
           if (res.isDead) {
@@ -1339,7 +1362,15 @@ export class GameEngine {
           }
         } else if (hitBot && !hitBot.isDead) {
           hitCount++;
-          const res = hitBot.takeDamage(wep.damage, isHeadshot);
+          const res = hitBot.takeDamage(wep.damage, isHeadshot, headMult);
+          const prev = damageAgg.get(hitBot);
+          if (prev) {
+            prev.dmg += res.actualDmg;
+            prev.isCrit = prev.isCrit || res.isHeadshot;
+            if (res.isHeadshot) prev.pos.copy(hitPoint);
+          } else {
+            damageAgg.set(hitBot, { dmg: res.actualDmg, isCrit: res.isHeadshot, pos: hitPoint.clone() });
+          }
           this.triggerHitmarker(res.isHeadshot);
           this.particles.addImpactSparks(hitPoint, this._worldNormal, true);
 
@@ -1358,6 +1389,10 @@ export class GameEngine {
         this.particles.addTracer(this._muzzlePos, farPt, tracerColor);
       }
     }
+
+    damageAgg.forEach((entry) => {
+      this.particles.addFloatingDamage(entry.pos, entry.dmg, entry.isCrit);
+    });
 
     if (hitCount > 0) {
       this.profile.totalHits += hitCount;
@@ -1833,6 +1868,7 @@ export class GameEngine {
     this.isCrouching = false;
     this.state.isCrouching = false;
     this.playerEyeHeight = 1.75;
+    this.screenShakeIntensity = 0;
     this.playerPos.copy(this.arena.playerSpawn);
     this.playerVel.set(0, 0, 0);
     this.camera.position.copy(this.playerPos);
@@ -1883,7 +1919,24 @@ export class GameEngine {
       this.updateHUDState(delta);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.screenShakeIntensity > 0.0005 && !this.state.isPaused && !this.state.isDead) {
+      this.screenShakeIntensity = Math.max(0, this.screenShakeIntensity - delta * 0.28);
+      this.screenShakePhase += delta * 68;
+      const sx = Math.sin(this.screenShakePhase * 1.13) * this.screenShakeIntensity;
+      const sy = Math.cos(this.screenShakePhase * 1.47) * this.screenShakeIntensity;
+      const sRoll = Math.sin(this.screenShakePhase * 0.89) * this.screenShakeIntensity * 0.35;
+      this._right.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+      this._up.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
+      this.camera.position.addScaledVector(this._right, sx).addScaledVector(this._up, sy);
+      const prevRotZ = this.camera.rotation.z;
+      this.camera.rotation.z = prevRotZ + sRoll;
+      this.renderer.render(this.scene, this.camera);
+      this.camera.position.copy(this.playerPos);
+      this.camera.rotation.z = prevRotZ;
+    } else {
+      this.screenShakeIntensity = 0;
+      this.renderer.render(this.scene, this.camera);
+    }
   };
 
   private updatePhysics(delta: number) {

@@ -995,11 +995,11 @@ export function generateStandaloneHtml(): string {
     // 5. 7-SLOT ARSENAL, ULTRA-DETAILED PBR VIEWMODELS & ATTACHMENTS
     // =========================================================================
     const WEAPON_TEMPLATES = [
-      { id: 'ar_x7', name: 'AR-X7 Tactical', shortName: 'AR-X7', type: 'rifle', slot: 1, damage: 32, fireRate: 0.105, magSize: 30, maxReserve: 150, currentAmmo: 30, reserveAmmo: 120, reloadTime: 1.75, spread: 0.036, adsSpread: 0.006, adsFov: 54, range: 130, caliber: '6.8MM SPC', desc: 'Modular assault carbine with moving bolt carrier, charging handle, holographic reflex optic, laser sight, and tactical light.' },
-      { id: 'vector_v9', name: 'Vector-V9 Tactical', shortName: 'VECTOR-V9', type: 'smg', slot: 2, damage: 21, fireRate: 0.062, magSize: 36, maxReserve: 180, currentAmmo: 36, reserveAmmo: 144, reloadTime: 1.45, spread: 0.044, adsSpread: 0.014, adsFov: 58, range: 75, caliber: '9MM AP', desc: 'Compact CQB submachine gun with 960 RPM cyclic rate, integrated suppressor, straight stick mag, and micro red-dot.' },
-      { id: 'sg_12', name: 'SG-12 Breach', shortName: 'SG-12', type: 'shotgun', slot: 3, damage: 19, pellets: 8, fireRate: 0.78, magSize: 8, maxReserve: 40, currentAmmo: 8, reserveAmmo: 32, reloadTime: 2.1, spread: 0.088, adsSpread: 0.048, adsFov: 60, range: 46, caliber: '12 GAUGE', desc: 'Pump-action tactical shotgun with ventilated barrel heat shield, animated pump forend, bolt carrier, and underbarrel torch.' },
-      { id: 'sr_50', name: 'SR-50 Marksman', shortName: 'SR-50', type: 'sniper', slot: 4, damage: 95, fireRate: 1.05, magSize: 5, maxReserve: 25, currentAmmo: 5, reserveAmmo: 20, reloadTime: 2.35, spread: 0.055, adsSpread: 0.0008, adsFov: 26, range: 220, caliber: '.338 SUPP', desc: 'Long-range precision marksman rifle with integral suppressor, variable 8x reflective optic scope, bolt handle, and folding bipod.' },
-      { id: 'desert_python', name: '.50 Desert Python', shortName: '.50 PYTHON', type: 'pistol', slot: 5, damage: 58, fireRate: 0.34, magSize: 7, maxReserve: 42, currentAmmo: 7, reserveAmmo: 35, reloadTime: 1.35, spread: 0.026, adsSpread: 0.004, adsFov: 60, range: 95, caliber: '.50 AE MAG', desc: 'Heavy magnum sidearm featuring brushed steel reciprocating slide with last-shot hold-open, rib barrel, and underbarrel laser.' },
+      { id: 'ar_x7', name: 'AR-X7 Tactical', shortName: 'AR-X7', type: 'rifle', slot: 1, damage: 38, fireRate: 0.105, magSize: 30, maxReserve: 150, currentAmmo: 30, reserveAmmo: 120, reloadTime: 1.75, spread: 0.036, adsSpread: 0.006, adsFov: 54, range: 130, caliber: '6.8MM SPC', desc: 'Modular assault carbine with moving bolt carrier, charging handle, holographic reflex optic, laser sight, and tactical light.' },
+      { id: 'vector_v9', name: 'Vector-V9 Tactical', shortName: 'VECTOR-V9', type: 'smg', slot: 2, damage: 28, fireRate: 0.062, magSize: 36, maxReserve: 180, currentAmmo: 36, reserveAmmo: 144, reloadTime: 1.45, spread: 0.044, adsSpread: 0.014, adsFov: 58, range: 75, caliber: '9MM AP', desc: 'Compact CQB submachine gun with 960 RPM cyclic rate, integrated suppressor, straight stick mag, and micro red-dot.' },
+      { id: 'sg_12', name: 'SG-12 Breach', shortName: 'SG-12', type: 'shotgun', slot: 3, damage: 22, pellets: 8, fireRate: 0.78, magSize: 8, maxReserve: 40, currentAmmo: 8, reserveAmmo: 32, reloadTime: 2.1, spread: 0.088, adsSpread: 0.048, adsFov: 60, range: 46, caliber: '12 GAUGE', desc: 'Pump-action tactical shotgun with ventilated barrel heat shield, animated pump forend, bolt carrier, and underbarrel torch.' },
+      { id: 'sr_50', name: 'SR-50 Marksman', shortName: 'SR-50', type: 'sniper', slot: 4, damage: 120, fireRate: 1.05, magSize: 5, maxReserve: 25, currentAmmo: 5, reserveAmmo: 20, reloadTime: 2.35, spread: 0.055, adsSpread: 0.0008, adsFov: 26, range: 220, caliber: '.338 SUPP', desc: 'Long-range precision marksman rifle with integral suppressor, variable 8x reflective optic scope, bolt handle, and folding bipod.' },
+      { id: 'desert_python', name: '.50 Desert Python', shortName: '.50 PYTHON', type: 'pistol', slot: 5, damage: 65, hsMult: 3.0, fireRate: 0.34, magSize: 7, maxReserve: 42, currentAmmo: 7, reserveAmmo: 35, reloadTime: 1.35, spread: 0.026, adsSpread: 0.004, adsFov: 60, range: 95, caliber: '.50 AE MAG', desc: 'Heavy magnum sidearm featuring brushed steel reciprocating slide with last-shot hold-open, rib barrel, and underbarrel laser.' },
       { id: 'flash_frag', name: 'M84 Flash-Frag', shortName: 'FLASH-FRAG', type: 'grenade', slot: 6, damage: 145, fireRate: 0.9, magSize: 3, maxReserve: 4, currentAmmo: 2, reserveAmmo: 0, reloadTime: 0.6, spread: 0, adsSpread: 0, adsFov: 68, range: 36, caliber: 'CONCUSSION', desc: 'Dual-stage tactical grenade dealing 145 blast damage in a 9.5m radius and stunning surviving hostiles for 2.5s.' },
       { id: 'nano_medkit', name: 'Nano-Medkit', shortName: 'MEDKIT', type: 'medkit', slot: 7, damage: 0, fireRate: 1.0, magSize: 1, maxReserve: 3, currentAmmo: 2, reserveAmmo: 2, reloadTime: 0.5, spread: 0, adsSpread: 0, adsFov: 68, range: 0, caliber: 'BIO-GEL', desc: 'Pressurized nanite injector restoring +60 HP and +35 Armor immediately.' }
     ];
@@ -1504,6 +1504,42 @@ export function generateStandaloneHtml(): string {
       updateHUD();
     }
 
+    let shakeInt = 0, shakePh = 0;
+    const floatingDamages = [];
+    function spawnDamageNumber(pos, amount, isCrit) {
+      if (!amount || amount <= 0) return;
+      if (floatingDamages.length >= 28) {
+        const old = floatingDamages.shift();
+        if (old) { scene.remove(old.sprite); old.tex.dispose(); old.mat.dispose(); }
+      }
+      const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+      const ctx = c.getContext('2d');
+      const lbl = isCrit ? (Math.round(amount) + '!') : String(Math.round(amount));
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = isCrit ? '900 72px "JetBrains Mono", monospace' : '800 54px "JetBrains Mono", monospace';
+      ctx.lineJoin = 'round'; ctx.lineWidth = isCrit ? 11 : 8;
+      ctx.strokeStyle = isCrit ? 'rgba(69,10,10,0.96)' : 'rgba(2,6,23,0.92)';
+      ctx.strokeText(lbl, 128, 64);
+      if (isCrit) {
+        const gr = ctx.createLinearGradient(0, 24, 0, 104);
+        gr.addColorStop(0, '#fef08a'); gr.addColorStop(0.55, '#facc15'); gr.addColorStop(1, '#ef4444');
+        ctx.fillStyle = gr;
+      } else ctx.fillStyle = '#ffffff';
+      ctx.fillText(lbl, 128, 64);
+      const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+      const sp = new THREE.Sprite(mat);
+      sp.position.set(pos.x + (Math.random()-0.5)*0.24, pos.y + 0.16, pos.z + (Math.random()-0.5)*0.24);
+      const bsx = isCrit ? 1.55 : 1.05, bsy = isCrit ? 0.78 : 0.52;
+      sp.scale.set(bsx, bsy, 1); sp.renderOrder = 1000;
+      scene.add(sp);
+      floatingDamages.push({
+        sprite: sp, tex, mat,
+        vel: new THREE.Vector3((Math.random()-0.5)*0.65, isCrit ? 2.15 : 1.65, (Math.random()-0.5)*0.65),
+        life: 0, maxLife: isCrit ? 0.8 : 0.65, bsx, bsy
+      });
+    }
+
     function detonateGrenade(pos) {
       AudioSys.flashFrag();
       const rgGeo = new THREE.RingGeometry(0.25, 0.6, 28); rgGeo.rotateX(-Math.PI/2);
@@ -1520,19 +1556,23 @@ export function generateStandaloneHtml(): string {
       let hitAny = false;
       enemies.forEach(bot => {
         if (bot.isDead) return;
-        const d = bot.pos.clone().setY(bot.pos.y + 1.1).distanceTo(pos);
+        const bc = bot.pos.clone().setY(bot.pos.y + 1.1);
+        const d = bc.distanceTo(pos);
         if (d <= 9.5) {
           const dmg = Math.max(25, Math.round(145 * (1 - (d / 9.5) * 0.68)));
           bot.hp -= dmg; bot.flash = 0.14; hitAny = true;
+          spawnDamageNumber(bc, dmg, false);
           if (bot.hp <= 0) eliminateBot(bot, false, 'FLASH-FRAG');
           else bot.stunTimer = Math.max(bot.stunTimer, 2.5);
         }
       });
       if (boss && !boss.isDead) {
-        const bd = boss.pos.clone().setY(boss.pos.y + 1.4).distanceTo(pos);
+        const bPos = boss.pos.clone().setY(boss.pos.y + 1.4);
+        const bd = bPos.distanceTo(pos);
         if (bd <= 10.3) {
           const dmg = Math.max(40, Math.round(165 * (1 - (bd / 10.3) * 0.65)));
           boss.hp -= dmg; boss.flash = 0.14; hitAny = true;
+          spawnDamageNumber(bPos, dmg, false);
           if (boss.hp <= 0) eliminateBoss('FLASH-FRAG', 'body');
           else boss.stunTimer = Math.max(boss.stunTimer, 1.4);
         }
@@ -1542,6 +1582,7 @@ export function generateStandaloneHtml(): string {
         setTimeout(() => { hm.style.display = 'none'; }, 140);
       }
       const pd = playerPos.distanceTo(pos);
+      if (pd < 14.0) shakeInt = Math.max(shakeInt, (1 - pd/14.0) * 0.08);
       if (pd < 7.0) state.flashGlare = Math.max(state.flashGlare, (1 - pd/7.0) * 0.6);
       saveProfile(); updateHUD();
     }
@@ -1583,7 +1624,8 @@ export function generateStandaloneHtml(): string {
       state.flashlight = false; tacticalLight.intensity = 0; state.flashGlare = 0; laserDot.visible = false;
       activeGrenades.forEach(g => scene.remove(g.mesh)); activeGrenades = [];
       clearBossHazards();
-      state.hp = 100; state.ap = 100; state.score = 0; state.killFeed = []; state.wepKills = {};
+      state.hp = 100; state.ap = 100; state.score = 0; state.killFeed = []; state.wepKills = {}; shakeInt = 0;
+      while (floatingDamages.length) { const fd = floatingDamages.pop(); scene.remove(fd.sprite); fd.tex.dispose(); fd.mat.dispose(); }
       const vp = document.getElementById('vamp-heal-pop'); if (vp) vp.classList.remove('active');
       state.sKills = 0; state.sHs = 0; state.sShots = 0; state.sHits = 0; state.sXp = 0; state.survT = 0; state.submitted = false; state.subRank = null;
       state.weapons = JSON.parse(JSON.stringify(WEAPON_TEMPLATES));
@@ -1607,11 +1649,11 @@ export function generateStandaloneHtml(): string {
       w.currentAmmo--; state.shootCd = w.fireRate; state.boltKick = 1.0;
       const sf = w.pellets || 1; profile.totalShots += sf; state.sShots += sf;
 
-      if (w.type === 'shotgun') { AudioSys.shotgun(); state.recoilPitch = 0.16; state.recoilZ = 0.13; state.pumpAnim = 1.0; }
-      else if (w.type === 'sniper') { AudioSys.sniper(); state.recoilPitch = 0.19; state.recoilZ = 0.14; }
-      else if (w.type === 'smg') { AudioSys.smg(); state.recoilPitch = 0.036; state.recoilZ = 0.034; }
-      else if (w.type === 'pistol') { AudioSys.magnum(); state.recoilPitch = 0.145; state.recoilZ = 0.11; }
-      else { AudioSys.rifle(); state.recoilPitch = 0.055; state.recoilZ = 0.048; }
+      if (w.type === 'shotgun') { AudioSys.shotgun(); state.recoilPitch = 0.16; state.recoilZ = 0.13; state.pumpAnim = 1.0; shakeInt = Math.max(shakeInt, 0.065); }
+      else if (w.type === 'sniper') { AudioSys.sniper(); state.recoilPitch = 0.19; state.recoilZ = 0.14; shakeInt = Math.max(shakeInt, 0.058); }
+      else if (w.type === 'smg') { AudioSys.smg(); state.recoilPitch = 0.036; state.recoilZ = 0.034; shakeInt = Math.max(shakeInt, 0.008); }
+      else if (w.type === 'pistol') { AudioSys.magnum(); state.recoilPitch = 0.145; state.recoilZ = 0.11; shakeInt = Math.max(shakeInt, 0.046); }
+      else { AudioSys.rifle(); state.recoilPitch = 0.055; state.recoilZ = 0.048; shakeInt = Math.max(shakeInt, 0.012); }
 
       const vm = viewmodels[w.id];
       const mAnchor = vm && vm.getObjectByName('muzzle');
@@ -1644,6 +1686,10 @@ export function generateStandaloneHtml(): string {
       const spread = (state.crouching && !state.aiming) ? rawSpread * 0.65 : rawSpread;
       const rc = new THREE.Raycaster();
       let hits = 0;
+      const dmgMap = new Map();
+      const botHsMult = w.hsMult || 2.5;
+      const bossHsMult = w.hsMult || 2.0;
+
       for (let p = 0; p < pellets; p++) {
         const sd = dir.clone();
         if (spread > 0) sd.addScaledVector(right, (Math.random()-0.5)*spread).addScaledVector(up, (Math.random()-0.5)*spread).normalize();
@@ -1663,9 +1709,13 @@ export function generateStandaloneHtml(): string {
           }
           if (hitBoss && boss && !boss.isDead) {
             hits++;
-            const mult = bossZone === 'weakspot' ? 2.2 : bossZone === 'head' ? 2.0 : 1.0;
-            boss.hp -= Math.round(w.damage * mult);
+            const mult = bossZone === 'weakspot' ? Math.max(2.2, bossHsMult) : bossZone === 'head' ? bossHsMult : 1.0;
+            const dealt = Math.round(w.damage * mult);
+            boss.hp -= dealt;
             boss.flash = 0.12;
+            const prev = dmgMap.get(boss);
+            if (prev) { prev.dmg += dealt; prev.isCrit = prev.isCrit || isHs; if (isHs) prev.pos.copy(hit.point); }
+            else dmgMap.set(boss, { dmg: dealt, isCrit: isHs, pos: hit.point.clone() });
             AudioSys.hit(isHs);
             state.hitActive = true; state.hitHs = isHs;
             const hm = document.getElementById('hitmarker');
@@ -1675,8 +1725,12 @@ export function generateStandaloneHtml(): string {
             if (boss.hp <= 0) eliminateBoss(w.shortName, bossZone);
           } else if (bot && !bot.isDead) {
             hits++;
-            bot.hp -= isHs ? Math.round(w.damage * 2.5) : w.damage;
+            const dealt = isHs ? Math.round(w.damage * botHsMult) : w.damage;
+            bot.hp -= dealt;
             bot.flash = 0.14;
+            const prev = dmgMap.get(bot);
+            if (prev) { prev.dmg += dealt; prev.isCrit = prev.isCrit || isHs; if (isHs) prev.pos.copy(hit.point); }
+            else dmgMap.set(bot, { dmg: dealt, isCrit: isHs, pos: hit.point.clone() });
             AudioSys.hit(isHs);
             state.hitActive = true; state.hitHs = isHs;
             const hm = document.getElementById('hitmarker');
@@ -1693,6 +1747,7 @@ export function generateStandaloneHtml(): string {
           spawnTracer(muzzlePos, camera.position.clone().addScaledVector(sd, w.range), w.type === 'shotgun' ? 0xf59e0b : 0x06b6d4);
         }
       }
+      dmgMap.forEach(e => spawnDamageNumber(e.pos, e.dmg, e.isCrit));
       if (hits > 0) { profile.totalHits += hits; state.sHits += hits; }
       if (w.currentAmmo === 0 && w.reserveAmmo > 0 && !state.reloading) {
         state.reloading = true; state.reloadT = 0; state.scoped = false;
@@ -2840,7 +2895,33 @@ export function generateStandaloneHtml(): string {
         if (s.life <= 0) { scene.remove(s.mesh); shells.splice(i, 1); }
       }
 
-      renderer.render(scene, camera);
+      for (let i = floatingDamages.length - 1; i >= 0; i--) {
+        const fd = floatingDamages[i]; fd.life += dt;
+        if (fd.life >= fd.maxLife) { scene.remove(fd.sprite); fd.tex.dispose(); fd.mat.dispose(); floatingDamages.splice(i, 1); continue; }
+        const t = fd.life / fd.maxLife;
+        fd.vel.y = Math.max(0.45, fd.vel.y - dt * 1.4);
+        fd.sprite.position.addScaledVector(fd.vel, dt);
+        const pop = t < 0.16 ? 0.85 + (t / 0.16) * 0.35 : 1.2 - (t - 0.16) * 0.26;
+        fd.sprite.scale.set(fd.bsx * pop, fd.bsy * pop, 1);
+        fd.mat.opacity = t < 0.6 ? 1 : Math.max(0, 1 - (t - 0.6) / 0.4);
+      }
+
+      if (shakeInt > 0.0005 && !state.paused && !state.dead) {
+        shakeInt = Math.max(0, shakeInt - dt * 0.28);
+        shakePh += dt * 68;
+        const sx = Math.sin(shakePh * 1.13) * shakeInt;
+        const sy = Math.cos(shakePh * 1.47) * shakeInt;
+        const sRoll = Math.sin(shakePh * 0.89) * shakeInt * 0.35;
+        const sr = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        const su = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+        camera.position.addScaledVector(sr, sx).addScaledVector(su, sy);
+        const rz = camera.rotation.z; camera.rotation.z = rz + sRoll;
+        renderer.render(scene, camera);
+        camera.position.copy(playerPos); camera.rotation.z = rz;
+      } else {
+        shakeInt = 0;
+        renderer.render(scene, camera);
+      }
     }
     animate();
   })();

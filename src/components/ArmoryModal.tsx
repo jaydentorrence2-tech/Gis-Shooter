@@ -41,7 +41,7 @@ export const ArmoryModal: React.FC<ArmoryModalProps> = ({
   const isUtility = current.type === 'medkit' || current.type === 'grenade';
   const damagePct = isUtility
     ? 0
-    : Math.min(100, Math.round(((current.damage * (current.pellets || 1)) / 155) * 100));
+    : Math.min(100, Math.round(((current.damage * (current.pellets || 1)) / 176) * 100));
   const ratePct = isUtility
     ? 0
     : Math.min(100, Math.round(((1 / current.fireRate) / 16) * 100));
