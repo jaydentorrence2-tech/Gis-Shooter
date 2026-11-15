@@ -99,6 +99,7 @@ export class BossSpecialist {
   private weakspotTankMat: THREE.MeshStandardMaterial;
   private coatMat: THREE.MeshStandardMaterial;
   private scalpelBladeMat: THREE.MeshStandardMaterial;
+  private redEyeMat: THREE.MeshStandardMaterial;
 
   private hitFlashTimer = 0;
   private walkCycle = 0;
@@ -116,6 +117,8 @@ export class BossSpecialist {
   private rushDir = new THREE.Vector3();
   private rushHitDealt = false;
 
+  public hitMeshes: THREE.Mesh[] = [];
+
   // Scratch vectors
   private _raycaster = new THREE.Raycaster();
   private _eyeOrigin = new THREE.Vector3();
@@ -123,6 +126,10 @@ export class BossSpecialist {
   private _strafeVec = new THREE.Vector3();
   private _moveStep = new THREE.Vector3();
   private _muzzleWorld = new THREE.Vector3();
+  private _aimDir = new THREE.Vector3();
+  private _forwardFlat = new THREE.Vector3();
+  private _moveVec = new THREE.Vector3();
+  private _gasTarget = new THREE.Vector3();
 
   constructor(spawnPos: THREE.Vector3) {
     this.position = spawnPos.clone();
@@ -163,7 +170,7 @@ export class BossSpecialist {
       roughness: 0.35,
       metalness: 0.8,
     });
-    const redEyeMat = new THREE.MeshStandardMaterial({
+    this.redEyeMat = new THREE.MeshStandardMaterial({
       color: 0xff1e42,
       emissive: 0xff0033,
       emissiveIntensity: 3.2,
@@ -253,7 +260,7 @@ export class BossSpecialist {
     this.headMesh.add(goggleFrame);
 
     [-0.08, 0.08].forEach((ex) => {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.036, 10, 10), redEyeMat);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.036, 10, 10), this.redEyeMat);
       eye.position.set(ex, 0.04, 0.195);
       eye.name = 'ENEMY_HEAD';
       this.headMesh.add(eye);
@@ -344,6 +351,12 @@ export class BossSpecialist {
     this.rightLegPivot = buildLeg(0.18);
     this.bodyPivot.add(this.leftLegPivot);
     this.bodyPivot.add(this.rightLegPivot);
+
+    this.group.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        this.hitMeshes.push(child as THREE.Mesh);
+      }
+    });
   }
 
   public takeDamage(
@@ -374,6 +387,55 @@ export class BossSpecialist {
     if (this.isDead || this.isDying) return;
     // Boss resists full stun duration (1.4s max)
     this.stunTimer = Math.max(this.stunTimer, Math.min(1.4, duration * 0.56));
+  }
+
+  public setCutscenePose(mode: 'hidden' | 'emerge' | 'pose' | 'combat', progress = 1) {
+    const p = THREE.MathUtils.clamp(progress, 0, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    if (mode === 'hidden') {
+      this.group.visible = false;
+      this.bodyPivot.position.y = -1.65;
+      return;
+    }
+
+    this.group.visible = true;
+    this.leftLegPivot.rotation.set(0, 0, 0);
+    this.rightLegPivot.rotation.set(0, 0, 0);
+
+    if (mode === 'emerge') {
+      // Face south (+Z) directly toward the close-up camera & arena center
+      this.group.rotation.y = 0;
+      this.bodyPivot.position.y = THREE.MathUtils.lerp(-1.55, 0, ease);
+      this.rightArmPivot.rotation.set(THREE.MathUtils.lerp(0.32, -0.34, ease), -0.14 * ease, 0);
+      this.leftArmPivot.rotation.set(THREE.MathUtils.lerp(0.28, -0.46, ease), 0.1 * ease, 0);
+      this.headMesh.rotation.set(THREE.MathUtils.lerp(0.24, 0.06, ease), 0, 0);
+      this.redEyeMat.emissiveIntensity = 4.0 + Math.sin(p * Math.PI * 3) * 0.8;
+      this.weakspotTankMat.emissiveIntensity = 3.0;
+      this.scalpelBladeMat.emissiveIntensity = 3.4;
+      return;
+    }
+
+    if (mode === 'pose') {
+      this.group.rotation.y = 0;
+      this.bodyPivot.position.y = 0;
+      this.rightArmPivot.rotation.set(-0.34 + Math.sin(p * Math.PI) * 0.06, -0.18, 0);
+      this.leftArmPivot.rotation.set(-0.48, 0.12, 0);
+      this.headMesh.rotation.set(0.06, Math.sin(p * Math.PI) * 0.06, 0);
+      this.redEyeMat.emissiveIntensity = 4.6 + Math.sin(p * Math.PI * 4) * 0.9;
+      this.weakspotTankMat.emissiveIntensity = 3.2;
+      this.scalpelBladeMat.emissiveIntensity = 3.6;
+      return;
+    }
+
+    // Combat reset
+    this.bodyPivot.position.y = 0;
+    this.bodyPivot.rotation.set(0, 0, 0);
+    this.headMesh.rotation.set(0, 0, 0);
+    this.rightArmPivot.rotation.set(0, 0, 0);
+    this.leftArmPivot.rotation.set(0, 0, 0);
+    this.redEyeMat.emissiveIntensity = 3.2;
+    this.weakspotTankMat.emissiveIntensity = 2.2;
+    this.scalpelBladeMat.emissiveIntensity = 2.4;
   }
 
   public update(
@@ -486,7 +548,8 @@ export class BossSpecialist {
       this.gasCooldown = 9.0;
       this.attackLabel = 'ANESTHETIC GAS CLOUD DEPLOYED';
       soundSystem.playGasCanisterHiss();
-      callbacks.onSpawnGasCloud(playerPos.clone());
+      this._gasTarget.copy(playerPos);
+      callbacks.onSpawnGasCloud(this._gasTarget);
     }
 
     // 4. Syringe Dart Barrage (Burst of 4 toxic darts)
@@ -497,12 +560,16 @@ export class BossSpecialist {
         this.barrageBurstTimer = 0.22;
         this.barrageBurstLeft--;
         this.syringeMuzzle.getWorldPosition(this._muzzleWorld);
-        const aimDir = new THREE.Vector3()
+        this._aimDir
           .subVectors(playerPos, this._muzzleWorld)
-          .add(new THREE.Vector3((Math.random() - 0.5) * 0.9, -0.08 + (Math.random() - 0.5) * 0.38, (Math.random() - 0.5) * 0.9))
+          .set(
+            this._aimDir.x + (Math.random() - 0.5) * 0.9,
+            this._aimDir.y - 0.08 + (Math.random() - 0.5) * 0.38,
+            this._aimDir.z + (Math.random() - 0.5) * 0.9
+          )
           .normalize();
         soundSystem.playSyringeShot();
-        callbacks.onFireSyringeDart(this._muzzleWorld.clone(), aimDir);
+        callbacks.onFireSyringeDart(this._muzzleWorld, this._aimDir);
       }
     } else if (hasLOS && this.barrageCooldown <= 0) {
       this.barrageCooldown = 3.2;
@@ -520,20 +587,20 @@ export class BossSpecialist {
       this.strafeDir *= -1;
     }
 
-    const forwardFlat = new THREE.Vector3(dx, 0, dz).normalize();
-    this._strafeVec.set(-forwardFlat.z, 0, forwardFlat.x).multiplyScalar(this.strafeDir);
+    this._forwardFlat.set(dx, 0, dz).normalize();
+    this._strafeVec.set(-this._forwardFlat.z, 0, this._forwardFlat.x).multiplyScalar(this.strafeDir);
 
-    const moveVec = new THREE.Vector3();
+    this._moveVec.set(0, 0, 0);
     if (!hasLOS || distToPlayer > 16) {
-      moveVec.addScaledVector(forwardFlat, 0.85).addScaledVector(this._strafeVec, 0.45);
+      this._moveVec.addScaledVector(this._forwardFlat, 0.85).addScaledVector(this._strafeVec, 0.45);
     } else if (distToPlayer < 6.5) {
-      moveVec.addScaledVector(this._strafeVec, 0.9);
+      this._moveVec.addScaledVector(this._strafeVec, 0.9);
     } else {
-      moveVec.addScaledVector(forwardFlat, 0.35).addScaledVector(this._strafeVec, 0.75);
+      this._moveVec.addScaledVector(this._forwardFlat, 0.35).addScaledVector(this._strafeVec, 0.75);
     }
-    moveVec.normalize();
+    this._moveVec.normalize();
 
-    this.tryMove(moveVec, 4.35 * delta, collisions);
+    this.tryMove(this._moveVec, 4.35 * delta, collisions);
     this.animateLegs(delta);
   }
 

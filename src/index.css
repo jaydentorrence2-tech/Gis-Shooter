@@ -41,3 +41,53 @@
   animation: vampireFloat 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes cutsceneTitleIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-cutscene-title {
+  animation: cutsceneTitleIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes glitchStrip {
+  0%, 100% {
+    transform: translateX(0);
+    opacity: 0.25;
+  }
+  25% {
+    transform: translateX(-14px);
+    opacity: 0.72;
+  }
+  50% {
+    transform: translateX(18px);
+    opacity: 0.38;
+  }
+  75% {
+    transform: translateX(-8px);
+    opacity: 0.85;
+  }
+}
+
+.animate-glitch-strip {
+  animation: glitchStrip 0.18s steps(2, end) infinite;
+}
+
+@keyframes cutsceneRedPulse {
+  0%, 100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-cutscene-pulse {
+  animation: cutsceneRedPulse 0.9s ease-in-out infinite;
+}

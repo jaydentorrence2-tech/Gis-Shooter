@@ -385,6 +385,31 @@ export function saveLocalScore(entry: Omit<LeaderboardEntry, 'id' | 'timestamp' 
   return { savedEntry, allLocal: next };
 }
 
+export function migrateLocalCallsign(oldCallsign: string, newCallsign: string) {
+  const oldNorm = oldCallsign.trim().toUpperCase();
+  const newNorm = newCallsign.trim().toUpperCase();
+  if (!oldNorm || !newNorm || oldNorm === newNorm) return;
+
+  const existing = loadLocalScores();
+  if (existing.length === 0) return;
+
+  let changed = false;
+  const updated = existing.map((entry) => {
+    if (entry.isPlayer && entry.callsign.trim().toUpperCase() === oldNorm) {
+      changed = true;
+      return { ...entry, callsign: newNorm };
+    }
+    return entry;
+  });
+
+  if (!changed) return;
+  try {
+    localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(updated));
+  } catch {
+    // ignore storage errors
+  }
+}
+
 export interface RankedLeaderboardRow extends LeaderboardEntry {
   rank: number;
   isActivePlayer: boolean;
@@ -418,6 +443,17 @@ export function getMergedLeaderboard(
     if (c.score > prev) cloudBestByCallsign.set(k, c.score);
   }
 
+  // Keep only the highest local score per callsign for Global/Weekly so repeated runs or renames don't double-render
+  const bestLocalByCallsign = new Map<string, LeaderboardEntry>();
+  for (const l of local) {
+    const k = l.callsign.trim().toUpperCase();
+    const prev = bestLocalByCallsign.get(k);
+    if (!prev || l.score > prev.score || (l.score === prev.score && l.timestamp > prev.timestamp)) {
+      bestLocalByCallsign.set(k, l);
+    }
+  }
+  const dedupedLocal = Array.from(bestLocalByCallsign.values());
+
   let pool: LeaderboardEntry[] = [];
   if (tab === 'personal') {
     const myCloud = cloudEntries.filter(
@@ -426,14 +462,14 @@ export function getMergedLeaderboard(
     pool = [...myCloud, ...local];
   } else if (tab === 'weekly') {
     const weeklyCloud = cloudEntries.filter((e) => !e.weekKey || e.weekKey === weekKey);
-    const weeklyLocal = local.filter((e) => {
+    const weeklyLocal = dedupedLocal.filter((e) => {
       if (e.weekKey && e.weekKey !== weekKey) return false;
       const cloudScore = cloudBestByCallsign.get(e.callsign.trim().toUpperCase());
       return cloudScore === undefined || e.score > cloudScore;
     });
     pool = [...weeklyCloud, ...weeklyLocal, ...getWeeklyBots(weekKey)];
   } else {
-    const unsyncedLocal = local.filter((e) => {
+    const unsyncedLocal = dedupedLocal.filter((e) => {
       const cloudScore = cloudBestByCallsign.get(e.callsign.trim().toUpperCase());
       return cloudScore === undefined || e.score > cloudScore;
     });

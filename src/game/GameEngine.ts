@@ -15,6 +15,11 @@ import { ParticleSystem } from './particles';
 import { EnemyBot } from './enemy';
 import { BossHitZone, BossSpecialist } from './boss';
 import {
+  BOSS_LANDING_POS,
+  BossArrivalCutscene,
+  CutsceneHudSnapshot,
+} from './cutscene';
+import {
   WeaponDef,
   Slot4Choice,
   SLOT4_OPTIONS,
@@ -85,6 +90,7 @@ export interface GameState {
     subtitle: string;
     tone: 'crimson' | 'emerald';
   } | null;
+  cutscene: CutsceneHudSnapshot | null;
   vampireHealEvent: {
     id: number;
     amount: number;
@@ -221,8 +227,11 @@ export class GameEngine {
   private particles: ParticleSystem;
   private enemies: EnemyBot[] = [];
   private boss: BossSpecialist | null = null;
+  private bossCutscene: BossArrivalCutscene;
   private bossAlarmGroup: THREE.Group;
   private bossAlarmLights: THREE.PointLight[] = [];
+  private bossAlarmRotors: THREE.Group[] = [];
+  private bossAlarmBeams: THREE.MeshBasicMaterial[] = [];
   private activeSyringeDarts: {
     mesh: THREE.Group;
     position: THREE.Vector3;
@@ -311,6 +320,24 @@ export class GameEngine {
   private _worldNormal = new THREE.Vector3();
   private _normalMatrix = new THREE.Matrix3();
   private _raycaster = new THREE.Raycaster();
+  private _farPt = new THREE.Vector3();
+  private _laserStart = new THREE.Vector3();
+  private _laserQuat = new THREE.Quaternion();
+  private _laserDir = new THREE.Vector3();
+  private _grenadeNextPos = new THREE.Vector3();
+  private _tmpCheckPos = new THREE.Vector3();
+  private _dartAimPt = new THREE.Vector3();
+  private raycastTargetsCache: THREE.Object3D[] = [];
+
+  // Shared Boss Hazard Geometries & Materials (prevent per-attack allocation & GPU leak)
+  private dartBodyGeo: THREE.BufferGeometry;
+  private dartTipGeo: THREE.BufferGeometry;
+  private dartBodyMat: THREE.MeshBasicMaterial;
+  private dartTipMat: THREE.MeshBasicMaterial;
+  private gasDomeGeo: THREE.BufferGeometry;
+  private gasRingGeo: THREE.BufferGeometry;
+  private gasDomeMat: THREE.MeshBasicMaterial;
+  private gasRingMat: THREE.MeshBasicMaterial;
 
   // State & Callbacks
   public state: GameState;
@@ -318,6 +345,12 @@ export class GameEngine {
   private onStateChange: (state: GameState) => void;
   private onProfileChange: (profile: PlayerProfileData) => void;
   private animFrameId = 0;
+  private softGlTimerId: number | null = null;
+  private disposed = false;
+  private hudEmitAccum = 0;
+  private radarEmitAccum = 0.05;
+  private lastCutsceneEmitKey = '';
+  private lastDiscreteHudKey = '';
   private waveIntermissionTimer = 0;
   private vampireHealTimer = 0;
   private vampireHealSeq = 0;
@@ -437,6 +470,8 @@ export class GameEngine {
     [
       [-15, 9.2, -16],
       [15, 9.2, -16],
+      [-15, 9.2, 16],
+      [15, 9.2, 16],
     ].forEach(([ax, ay, az]) => {
       const beacon = new THREE.Group();
       beacon.position.set(ax, ay, az);
@@ -446,18 +481,59 @@ export class GameEngine {
       );
       beacon.add(housing);
       const bulb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.26, 12, 10),
+        new THREE.SphereGeometry(0.28, 12, 10),
         new THREE.MeshBasicMaterial({ color: 0xff1e42 })
       );
       bulb.position.y = -0.24;
       beacon.add(bulb);
-      const pLight = new THREE.PointLight(0xff1e42, 0, 42, 1.4);
-      pLight.position.y = -0.35;
+
+      const rotor = new THREE.Group();
+      rotor.position.y = -0.24;
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xff1e42,
+        transparent: true,
+        opacity: 0.22,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      this.bossAlarmBeams.push(beamMat);
+      [0, Math.PI].forEach((ang) => {
+        const cone = new THREE.Mesh(
+          new THREE.ConeGeometry(2.4, 13.5, 14, 1, true).rotateX(Math.PI / 2),
+          beamMat
+        );
+        cone.position.set(Math.sin(ang) * 6.75, -1.6, Math.cos(ang) * 6.75);
+        cone.rotation.y = ang;
+        cone.rotation.x = 0.24;
+        rotor.add(cone);
+      });
+      beacon.add(rotor);
+      this.bossAlarmRotors.push(rotor);
+
+      const pLight = new THREE.PointLight(0xff1e42, 0, 44, 1.4);
+      pLight.position.y = -0.45;
       beacon.add(pLight);
       this.bossAlarmLights.push(pLight);
       this.bossAlarmGroup.add(beacon);
     });
     this.scene.add(this.bossAlarmGroup);
+
+    this.bossCutscene = new BossArrivalCutscene(this.scene, this.camera, {
+      onReentryStart: () => {
+        soundSystem.playDropPodReentry();
+      },
+      onImpact: () => {
+        soundSystem.playDropPodImpact();
+        this.screenShakeIntensity = Math.max(this.screenShakeIntensity, 0.16);
+      },
+      onRevealSting: () => {
+        soundSystem.playBossRevealSting();
+      },
+      onComplete: (skipped) => {
+        this.finishBossCutscene(skipped);
+      },
+    });
 
     // 6. Build Tactical Facility Arena, 3D Interactive Hangar Lobby & Particle Pool
     const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
@@ -588,6 +664,7 @@ export class GameEngine {
       slowRemaining: 0,
       inGasHazard: false,
       bossBanner: null,
+      cutscene: null,
       vampireHealEvent: null,
       fps: 60,
       pointerLockNotice: null,
@@ -606,10 +683,37 @@ export class GameEngine {
       },
     };
 
+    this.dartBodyGeo = new THREE.CylinderGeometry(0.032, 0.032, 0.36, 8).rotateX(Math.PI / 2);
+    this.dartTipGeo = new THREE.ConeGeometry(0.035, 0.14, 8).rotateX(Math.PI / 2);
+    this.dartBodyMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+    this.dartTipMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
+    this.gasDomeGeo = new THREE.SphereGeometry(4.8, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+    this.gasRingGeo = new THREE.RingGeometry(4.62, 4.8, 32).rotateX(-Math.PI / 2);
+    this.gasDomeMat = new THREE.MeshBasicMaterial({
+      color: 0x10b981,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    this.gasRingMat = new THREE.MeshBasicMaterial({
+      color: 0x34d399,
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
     this.equipWeapon(this.state.activeWeaponIndex, true);
     this.applyGraphicsPreset(this.profile.graphicsPreset);
     this.bindEvents();
     window.addEventListener('resize', this.onResize);
+
+    // Pre-compile WebGL shaders up-front to eliminate first-frame / impact hitches
+    if (!this.isSoftwareGl) {
+      this.renderer.compile(this.scene, this.camera);
+      this.renderer.compile(this.lobby.scene, this.lobby.camera);
+    }
 
     // Start render loop immediately for live orbiting 3D Main Menu
     this.clock.start();
@@ -910,7 +1014,7 @@ export class GameEngine {
   }
 
   private handlePointerLockRejected(err?: unknown) {
-    if (this.state.isInMenu || this.state.isDead) return;
+    if (this.state.isInMenu || this.state.isDead || this.bossCutscene.isActive) return;
     const msg =
       err instanceof Error ? err.message : typeof err === 'string' ? err : '';
     const isCooldown =
@@ -987,13 +1091,14 @@ export class GameEngine {
     this.state.isPaused = false;
     this.state.isInventoryOpen = false;
     this.state.isInMenu = false;
-    this.weaponRig.visible = true;
+    this.weaponRig.visible = !this.bossCutscene.isActive;
     soundSystem.stopLobbyAmbient();
     this.emitState();
     soundSystem.resume();
   };
 
   private onControlsUnlock = () => {
+    if (this.bossCutscene.isActive) return;
     if (!this.state.isDead && !this.state.isInventoryOpen && !this.state.isInMenu) {
       this.state.isPaused = true;
       this.isMouseDown = false;
@@ -1051,6 +1156,7 @@ export class GameEngine {
       this.state.isPaused ||
       this.state.isInventoryOpen ||
       this.state.isDead ||
+      this.bossCutscene.isActive ||
       !this.controls.isLocked
     ) {
       return;
@@ -1070,13 +1176,21 @@ export class GameEngine {
   private onContextMenu = (e: MouseEvent) => e.preventDefault();
 
   private onMouseMove = (e: MouseEvent) => {
-    if (!this.controls.isLocked) return;
+    if (!this.controls.isLocked || this.bossCutscene.isActive) return;
     this.swayTargetX = THREE.MathUtils.clamp(-e.movementX * 0.0008, -0.045, 0.045);
     this.swayTargetY = THREE.MathUtils.clamp(e.movementY * 0.0008, -0.045, 0.045);
   };
 
   private onKeyDown = (e: KeyboardEvent) => {
     if (this.state.isDead || this.state.isInMenu) return;
+
+    if (this.bossCutscene.isActive) {
+      if (e.code === 'Space' && !e.repeat && this.bossCutscene.elapsed > 0.25) {
+        e.preventDefault();
+        this.bossCutscene.skip();
+      }
+      return;
+    }
 
     if (e.code === 'Tab' || e.code === 'KeyI') {
       e.preventDefault();
@@ -1195,6 +1309,12 @@ export class GameEngine {
     if (this.state.isPaused || this.state.isInventoryOpen || this.state.isDead || this.state.isInMenu) {
       return;
     }
+    if (this.bossCutscene.isActive) {
+      if (!this.controls.isLocked && e.target === this.renderer.domElement) {
+        this.requestPointerLockSafe();
+      }
+      return;
+    }
     if (!this.controls.isLocked) {
       if (e.target === this.renderer.domElement) {
         this.requestPointerLockSafe();
@@ -1240,6 +1360,9 @@ export class GameEngine {
   public enterMenuMode() {
     this.clearPointerLockNoticeTimer();
     this.state.pointerLockNotice = null;
+    this.bossCutscene.resetAll();
+    this.state.cutscene = null;
+    soundSystem.stopCutsceneSiren();
     this.state.isInMenu = true;
     this.state.isPaused = true;
     this.state.isInventoryOpen = false;
@@ -1259,7 +1382,7 @@ export class GameEngine {
   }
 
   public toggleInventory() {
-    if (this.state.isDead || this.state.isInMenu) return;
+    if (this.state.isDead || this.state.isInMenu || this.bossCutscene.isActive) return;
     this.state.isInventoryOpen = !this.state.isInventoryOpen;
 
     if (this.state.isInventoryOpen) {
@@ -1395,14 +1518,14 @@ export class GameEngine {
       const bot = this.enemies[i];
       if (bot.isDead) continue;
 
-      const botCenter = bot.position.clone().setY(bot.position.y + 1.1);
-      const dist = botCenter.distanceTo(pos);
+      this._tmpCheckPos.set(bot.position.x, bot.position.y + 1.1, bot.position.z);
+      const dist = this._tmpCheckPos.distanceTo(pos);
       if (dist <= radius) {
         const falloff = 1 - (dist / radius) * 0.68;
         const dmg = Math.max(25, Math.round(maxDmg * falloff));
         const res = bot.takeDamage(dmg, false);
         hitAny = true;
-        this.particles.addFloatingDamage(botCenter, res.actualDmg, false);
+        this.particles.addFloatingDamage(this._tmpCheckPos, res.actualDmg, false);
         if (res.isDead) {
           this.handleEnemyEliminated(bot, false, 'FLASH-FRAG');
         } else {
@@ -1412,14 +1535,14 @@ export class GameEngine {
     }
 
     if (this.boss && !this.boss.isDead) {
-      const bossCenter = this.boss.position.clone().setY(this.boss.position.y + 1.4);
-      const bDist = bossCenter.distanceTo(pos);
+      this._tmpCheckPos.set(this.boss.position.x, this.boss.position.y + 1.4, this.boss.position.z);
+      const bDist = this._tmpCheckPos.distanceTo(pos);
       if (bDist <= radius + 0.8) {
         const falloff = 1 - (bDist / (radius + 0.8)) * 0.65;
         const dmg = Math.max(40, Math.round(maxDmg * 1.15 * falloff));
         const res = this.boss.takeDamage(dmg, 'body');
         hitAny = true;
-        this.particles.addFloatingDamage(bossCenter, res.actualDmg, false);
+        this.particles.addFloatingDamage(this._tmpCheckPos, res.actualDmg, false);
         if (res.isDead) {
           this.handleBossDefeated('FLASH-FRAG');
         } else {
@@ -1449,7 +1572,7 @@ export class GameEngine {
       g.fuseTimer -= delta;
       g.velocity.y -= 18.5 * delta;
 
-      const nextPos = g.position.clone().addScaledVector(g.velocity, delta);
+      const nextPos = this._grenadeNextPos.copy(g.position).addScaledVector(g.velocity, delta);
 
       // Wall/Crate collision bounce
       for (let cIdx = 0; cIdx < this.arena.collisions.length; cIdx++) {
@@ -1635,24 +1758,21 @@ export class GameEngine {
       }
     }
 
-    // Collect raycast targets (living enemy meshes + Wave 10 Boss + arena geometry)
-    const targetMeshes: THREE.Object3D[] = [];
+    // Collect raycast targets using pre-cached hitMeshes (zero scene-graph traversal per shot)
+    const targetMeshes = this.raycastTargetsCache;
+    targetMeshes.length = 0;
     for (let i = 0; i < this.enemies.length; i++) {
       const bot = this.enemies[i];
       if (!bot.isDead) {
-        bot.group.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh && child !== (bot as unknown as { healthBarMesh: THREE.Mesh }).healthBarMesh) {
-            targetMeshes.push(child);
-          }
-        });
+        for (let m = 0; m < bot.hitMeshes.length; m++) {
+          targetMeshes.push(bot.hitMeshes[m]);
+        }
       }
     }
     if (this.boss && !this.boss.isDead) {
-      this.boss.group.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          targetMeshes.push(child);
-        }
-      });
+      for (let m = 0; m < this.boss.hitMeshes.length; m++) {
+        targetMeshes.push(this.boss.hitMeshes[m]);
+      }
     }
     for (let i = 0; i < this.arena.obstacleMeshes.length; i++) {
       targetMeshes.push(this.arena.obstacleMeshes[i]);
@@ -1763,8 +1883,8 @@ export class GameEngine {
 
         this.particles.addTracer(this._muzzlePos, hitPoint, tracerColor);
       } else {
-        const farPt = this.camera.position.clone().addScaledVector(this._spreadDir, wep.range);
-        this.particles.addTracer(this._muzzlePos, farPt, tracerColor);
+        this._farPt.copy(this.camera.position).addScaledVector(this._spreadDir, wep.range);
+        this.particles.addTracer(this._muzzlePos, this._farPt, tracerColor);
       }
     }
 
@@ -1919,8 +2039,6 @@ export class GameEngine {
       this.profile.level++;
       this.profile.xp -= (this.profile.level - 1) * 250;
     }
-    this.waveIntermissionTimer = 15.0;
-    this.state.prepPhaseRemaining = 15.0;
 
     this.state.weapons.forEach((w) => {
       if (w.type === 'medkit' || w.type === 'grenade') {
@@ -1934,10 +2052,28 @@ export class GameEngine {
       this.profile.highestWave = this.state.wave;
     }
     this.saveProfile();
+
+    // Immediately trigger Wave 10 Cinematic Boss Arrival Cutscene when Wave 9 is cleared
+    if (this.state.wave === 9) {
+      this.waveIntermissionTimer = 0;
+      this.state.prepPhaseRemaining = 0;
+      this.startNewWave(10);
+      return;
+    }
+
+    this.waveIntermissionTimer = 15.0;
+    this.state.prepPhaseRemaining = 15.0;
   }
 
   public skipPrepPhase() {
-    if (this.waveIntermissionTimer <= 0 || this.state.isDead || this.state.isInMenu) return;
+    if (
+      this.waveIntermissionTimer <= 0 ||
+      this.state.isDead ||
+      this.state.isInMenu ||
+      this.bossCutscene.isActive
+    ) {
+      return;
+    }
     this.waveIntermissionTimer = 0;
     this.state.prepPhaseRemaining = 0;
     this.startNewWave(this.state.wave + 1);
@@ -2032,7 +2168,7 @@ export class GameEngine {
   }
 
   public damagePlayer(amount: number) {
-    if (this.state.isDead || this.state.adminCheats.godMode) return;
+    if (this.state.isDead || this.state.adminCheats.godMode || this.bossCutscene.isActive) return;
     soundSystem.playPlayerHurt();
     this.state.damageVignette = 0.8;
 
@@ -2133,6 +2269,38 @@ export class GameEngine {
     this.inGasHazard = false;
   }
 
+  private finishBossCutscene(_skipped: boolean) {
+    soundSystem.stopCutsceneSiren();
+    this.state.cutscene = null;
+    this.weaponRig.visible = true;
+
+    if (this.boss && !this.boss.isDead) {
+      this.boss.setCutscenePose('combat', 1);
+      this.state.bossState = {
+        name: this.boss.displayName,
+        health: this.boss.health,
+        maxHealth: this.boss.maxHealth,
+        attackLabel: this.boss.attackLabel,
+        active: true,
+      };
+      this.state.bossBanner = {
+        title: 'THE SPECIALIST ANESTESI HAS ENTERED THE ARENA',
+        subtitle: 'TARGET DORSAL BIO-TANK (2.2x) OR HEAD (2.0x)',
+        tone: 'crimson',
+      };
+      this.bossBannerTimer = 3.8;
+    }
+
+    soundSystem.startBossMusic();
+
+    if (!this.controls.isLocked && !this.state.isInMenu && !this.state.isDead) {
+      this.state.isPaused = true;
+      this.state.pointerLockNotice = 'Click Resume to lock mouse aim.';
+    }
+
+    this.emitState();
+  }
+
   public startNewWave(waveNum: number) {
     this.state.wave = waveNum;
     this.waveIntermissionTimer = 0;
@@ -2144,33 +2312,62 @@ export class GameEngine {
       this.scene.remove(this.boss.group);
       this.boss = null;
     }
+    this.bossCutscene.resetAll();
+    this.state.cutscene = null;
+    soundSystem.stopCutsceneSiren();
     this.clearBossHazards();
 
     if (waveNum === 10) {
-      // Wave 10 Boss Encounter: "The Specialist Anestesi"
-      this.boss = new BossSpecialist(new THREE.Vector3(0, 0, -24));
+      // Wave 10 Boss Encounter: 7.0s Cinematic Arrival Cutscene ("The Specialist Anestesi")
+      this.boss = new BossSpecialist(BOSS_LANDING_POS);
       this.scene.add(this.boss.group);
       this.applyMaterialQuality(this.boss.group, this.profile.graphicsPreset);
       this.setBossAtmosphere(true);
-      this.particles.addBossEntranceMist(this.boss.position);
-      soundSystem.playBossEntranceAlarm();
-      soundSystem.startBossMusic();
+      soundSystem.stopBossMusic();
+      soundSystem.startCutsceneSiren();
 
+      // Clear active combat inputs & protect view while cutscene runs
+      this.moveForward = false;
+      this.moveBackward = false;
+      this.moveLeft = false;
+      this.moveRight = false;
+      this.isSprinting = false;
+      this.isMouseDown = false;
+      this.isAiming = false;
+      this.state.isAiming = false;
+      this.state.isScoped = false;
+      this.isReloading = false;
+      this.state.isReloading = false;
+      this.weaponRig.visible = false;
+      this.laserDot.visible = false;
+
+      // Ensure player isn't standing inside crater impact radius when control returns, and faces the Boss
+      const distToCrater = Math.hypot(
+        this.playerPos.x - BOSS_LANDING_POS.x,
+        this.playerPos.z - BOSS_LANDING_POS.z
+      );
+      if (distToCrater < 5.0) {
+        this.playerPos.set(0, this.playerEyeHeight, -12.6);
+        this.camera.position.copy(this.playerPos);
+        this.camera.lookAt(BOSS_LANDING_POS.x, 1.65, BOSS_LANDING_POS.z);
+      }
+
+      this.state.isPaused = false;
+      this.state.isInventoryOpen = false;
       this.state.isBossWave = true;
       this.state.enemiesRemaining = 1;
-      this.state.bossState = {
-        name: this.boss.displayName,
-        health: this.boss.health,
-        maxHealth: this.boss.maxHealth,
-        attackLabel: this.boss.attackLabel,
-        active: true,
-      };
-      this.state.bossBanner = {
-        title: 'WARNING · THE SPECIALIST ANESTESI',
-        subtitle: 'WAVE 10 BOSS ARRIVAL · TARGET DORSAL BIO-TANK OR HEAD',
-        tone: 'crimson',
-      };
-      this.bossBannerTimer = 4.6;
+      this.state.bossState = null;
+      this.state.bossBanner = null;
+      this.bossBannerTimer = 0;
+
+      this.bossCutscene.start(
+        this.boss,
+        this.playerPos,
+        this.camera.quaternion,
+        this.profile.baseFov,
+        this.profile.graphicsPreset === 'potato'
+      );
+      this.state.cutscene = this.bossCutscene.getHudSnapshot();
       this.emitState();
       return;
     }
@@ -2206,12 +2403,14 @@ export class GameEngine {
   public startGame(initialWave = 1, autoLock = true) {
     soundSystem.stopLobbyAmbient();
     soundSystem.stopBossMusic();
+    soundSystem.stopCutsceneSiren();
+    this.bossCutscene.resetAll();
     this.setBossAtmosphere(false);
     this.state.health = 100;
     this.state.armor = 100;
     this.state.score = 0;
     this.state.isDead = false;
-    this.state.isPaused = !autoLock;
+    this.state.isPaused = initialWave === 10 ? false : !autoLock;
     this.state.isInMenu = false;
     this.state.isInventoryOpen = false;
     this.state.killFeed = [];
@@ -2229,6 +2428,7 @@ export class GameEngine {
     this.state.slowRemaining = 0;
     this.state.inGasHazard = false;
     this.state.bossBanner = null;
+    this.state.cutscene = null;
     this.bossBannerTimer = 0;
     this.state.vampireHealEvent = null;
     this.vampireHealTimer = 0;
@@ -2319,20 +2519,29 @@ export class GameEngine {
       return;
     }
     if (this.state.isDead) return;
+    if (this.state.wave + 1 === 10) {
+      this.adminSummonBossWave();
+      return;
+    }
     this.waveIntermissionTimer = 0;
     this.state.prepPhaseRemaining = 0;
     this.startNewWave(this.state.wave + 1);
   }
 
   public adminSummonBossWave() {
+    this.clearPointerLockNoticeTimer();
+    this.state.pointerLockNotice = null;
     if (this.state.isInMenu) {
-      this.startGame(10, false);
+      this.startGame(10, true);
       return;
     }
     if (this.state.isDead) return;
+    this.state.isPaused = false;
+    this.state.isInventoryOpen = false;
     this.waveIntermissionTimer = 0;
     this.state.prepPhaseRemaining = 0;
     this.startNewWave(10);
+    this.requestPointerLockSafe();
   }
 
   public adminKillAllHostiles(): number {
@@ -2380,10 +2589,31 @@ export class GameEngine {
     this.emitState();
   }
 
+  private scheduleNextFrame = () => {
+    if (this.disposed) return;
+    if (this.isSoftwareGl) {
+      if (this.softGlTimerId !== null) window.clearTimeout(this.softGlTimerId);
+      this.softGlTimerId = window.setTimeout(() => {
+        this.softGlTimerId = null;
+        if (!this.disposed) {
+          this.animFrameId = requestAnimationFrame(this.loop);
+        }
+      }, 16);
+    } else {
+      this.animFrameId = requestAnimationFrame(this.loop);
+    }
+  };
+
   // --- Main Render & Simulation Loop ---
   private loop = () => {
-    this.animFrameId = requestAnimationFrame(this.loop);
-    if (this.contextLost) return;
+    if (this.disposed) return;
+    if (!this.isSoftwareGl) {
+      this.animFrameId = requestAnimationFrame(this.loop);
+    }
+    if (this.contextLost) {
+      if (this.isSoftwareGl) this.scheduleNextFrame();
+      return;
+    }
 
     this.fpsFrames++;
     const now = performance.now();
@@ -2400,6 +2630,7 @@ export class GameEngine {
     if (this.state.isInMenu) {
       this.lobby.update(delta);
       this.renderer.render(this.lobby.scene, this.lobby.camera);
+      if (this.isSoftwareGl) this.scheduleNextFrame();
       return;
     }
 
@@ -2408,28 +2639,69 @@ export class GameEngine {
       this.arena.energyCores[i].rotation.y += delta * 0.9;
     }
 
-    // Pulse & rotate crimson emergency lights during Wave 10 Boss Fight (muted in Potato Mode)
+    // Pulse & rotate crimson emergency lights during Wave 10 Cutscene & Boss Fight (muted in Potato Mode)
     if (this.bossAlarmGroup.visible) {
+      const spinSpeed = this.bossCutscene.isActive ? 6.2 : 3.8;
+      if (!this.state.isPaused && !this.state.isDead) {
+        for (let i = 0; i < this.bossAlarmRotors.length; i++) {
+          this.bossAlarmRotors[i].rotation.y += delta * spinSpeed;
+        }
+      }
       if (this.profile.graphicsPreset === 'potato') {
-        this.bossAlarmLights.forEach((l) => {
-          l.intensity = 0;
-        });
+        for (let i = 0; i < this.bossAlarmLights.length; i++) {
+          this.bossAlarmLights[i].intensity = 0;
+        }
+        const bAlpha = this.bossCutscene.isActive ? 0.16 : 0.1;
+        for (let i = 0; i < this.bossAlarmBeams.length; i++) {
+          this.bossAlarmBeams[i].opacity = bAlpha;
+        }
       } else {
-        const pulse = 12 + Math.sin(now * 0.012) * 10;
-        this.bossAlarmLights.forEach((l, idx) => {
-          l.intensity = Math.max(4, pulse * (idx === 0 ? 1 : 0.85));
-        });
+        const pulse = 14 + Math.sin(now * 0.014) * 11;
+        for (let i = 0; i < this.bossAlarmLights.length; i++) {
+          this.bossAlarmLights[i].intensity = Math.max(5, pulse * (i % 2 === 0 ? 1 : 0.85));
+        }
+        const beamAlpha = this.bossCutscene.isActive
+          ? 0.24 + 0.1 * Math.sin(now * 0.014)
+          : 0.15 + 0.06 * Math.sin(now * 0.01);
+        for (let i = 0; i < this.bossAlarmBeams.length; i++) {
+          this.bossAlarmBeams[i].opacity = beamAlpha;
+        }
       }
     }
 
     if (!this.state.isPaused && !this.state.isDead) {
-      this.updatePhysics(delta);
-      this.updateWeapons(delta);
-      this.updateGrenades(delta);
-      this.updateBossHazards(delta);
-      this.updateEnemies(delta);
-      this.particles.update(delta);
-      this.updateHUDState(delta);
+      this.bossCutscene.update(delta);
+      if (this.bossCutscene.isActive) {
+        if (this.state.damageVignette > 0) {
+          this.state.damageVignette = Math.max(0, this.state.damageVignette - delta * 1.6);
+        }
+        if (this.state.flashbangGlare > 0) {
+          this.state.flashbangGlare = Math.max(0, this.state.flashbangGlare - delta * 1.4);
+        }
+        if (this.vampireHealTimer > 0) {
+          this.vampireHealTimer = Math.max(0, this.vampireHealTimer - delta);
+          if (this.vampireHealTimer <= 0) this.state.vampireHealEvent = null;
+        }
+        this.particles.update(delta);
+        const snap = this.bossCutscene.getHudSnapshot();
+        this.state.cutscene = snap;
+        const csKey = snap ? `${snap.phase}|${snap.showTitleCard}|${snap.canSkip}` : '';
+        this.hudEmitAccum += delta;
+        if (csKey !== this.lastCutsceneEmitKey || this.hudEmitAccum >= 0.05) {
+          this.lastCutsceneEmitKey = csKey;
+          this.hudEmitAccum = 0;
+          this.emitState();
+        }
+      } else {
+        this.lastCutsceneEmitKey = '';
+        this.updatePhysics(delta);
+        this.updateWeapons(delta);
+        this.updateGrenades(delta);
+        this.updateBossHazards(delta);
+        this.updateEnemies(delta);
+        this.particles.update(delta);
+        this.updateHUDState(delta);
+      }
     }
 
     if (this.screenShakeIntensity > 0.0005 && !this.state.isPaused && !this.state.isDead) {
@@ -2438,17 +2710,24 @@ export class GameEngine {
       const sx = Math.sin(this.screenShakePhase * 1.13) * this.screenShakeIntensity;
       const sy = Math.cos(this.screenShakePhase * 1.47) * this.screenShakeIntensity;
       const sRoll = Math.sin(this.screenShakePhase * 0.89) * this.screenShakeIntensity * 0.35;
+      const preShakeX = this.camera.position.x;
+      const preShakeY = this.camera.position.y;
+      const preShakeZ = this.camera.position.z;
       this._right.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
       this._up.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
       this.camera.position.addScaledVector(this._right, sx).addScaledVector(this._up, sy);
       const prevRotZ = this.camera.rotation.z;
       this.camera.rotation.z = prevRotZ + sRoll;
       this.renderer.render(this.scene, this.camera);
-      this.camera.position.copy(this.playerPos);
+      this.camera.position.set(preShakeX, preShakeY, preShakeZ);
       this.camera.rotation.z = prevRotZ;
     } else {
       this.screenShakeIntensity = 0;
       this.renderer.render(this.scene, this.camera);
+    }
+
+    if (this.isSoftwareGl) {
+      this.scheduleNextFrame();
     }
   };
 
@@ -2742,18 +3021,16 @@ export class GameEngine {
       const laserAnchor = this.activeViewmodel.getObjectByName('laserAnchor');
       const laserBeam = this.activeViewmodel.getObjectByName('laserBeam');
       if (showLaser && laserAnchor && laserBeam) {
-        const lStart = new THREE.Vector3();
-        const lQuat = new THREE.Quaternion();
-        laserAnchor.getWorldPosition(lStart);
-        laserAnchor.getWorldQuaternion(lQuat);
-        const lDir = new THREE.Vector3(0, 0, -1).applyQuaternion(lQuat).normalize();
-        this._raycaster.set(lStart, lDir);
+        laserAnchor.getWorldPosition(this._laserStart);
+        laserAnchor.getWorldQuaternion(this._laserQuat);
+        this._laserDir.set(0, 0, -1).applyQuaternion(this._laserQuat).normalize();
+        this._raycaster.set(this._laserStart, this._laserDir);
         this._raycaster.near = 0.1;
         this._raycaster.far = 28;
         const lHits = this._raycaster.intersectObjects(this.arena.obstacleMeshes, false);
         if (lHits.length > 0) {
           laserBeam.scale.z = Math.max(0.2, lHits[0].distance);
-          this.laserDot.position.copy(lHits[0].point).addScaledVector(lDir, -0.02);
+          this.laserDot.position.copy(lHits[0].point).addScaledVector(this._laserDir, -0.02);
           this.laserDot.visible = true;
         } else {
           laserBeam.scale.z = 22;
@@ -2806,20 +3083,15 @@ export class GameEngine {
 
   private spawnSyringeDart(origin: THREE.Vector3, dir: THREE.Vector3) {
     const dartGroup = new THREE.Group();
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.032, 0.032, 0.36, 8).rotateX(Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0x10b981 })
-    );
+    const body = new THREE.Mesh(this.dartBodyGeo, this.dartBodyMat);
     dartGroup.add(body);
-    const tip = new THREE.Mesh(
-      new THREE.ConeGeometry(0.035, 0.14, 8).rotateX(Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0xe2e8f0 })
-    );
+    const tip = new THREE.Mesh(this.dartTipGeo, this.dartTipMat);
     tip.position.z = 0.24;
     dartGroup.add(tip);
 
     dartGroup.position.copy(origin);
-    dartGroup.lookAt(origin.clone().add(dir));
+    this._dartAimPt.copy(origin).add(dir);
+    dartGroup.lookAt(this._dartAimPt);
     this.scene.add(dartGroup);
 
     this.activeSyringeDarts.push({
@@ -2837,28 +3109,10 @@ export class GameEngine {
     cloudGroup.position.copy(pos);
 
     const radius = 4.8;
-    const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(radius, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshBasicMaterial({
-        color: 0x10b981,
-        transparent: true,
-        opacity: 0.22,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      })
-    );
+    const dome = new THREE.Mesh(this.gasDomeGeo, this.gasDomeMat);
     cloudGroup.add(dome);
 
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(radius - 0.18, radius, 32).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({
-        color: 0x34d399,
-        transparent: true,
-        opacity: 0.65,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      })
-    );
+    const ring = new THREE.Mesh(this.gasRingGeo, this.gasRingMat);
     ring.position.y = 0.05;
     cloudGroup.add(ring);
 
@@ -3018,32 +3272,48 @@ export class GameEngine {
     this.state.isCrouching = this.isCrouching;
     this.state.crosshairSpread = THREE.MathUtils.damp(this.state.crosshairSpread, spread, 14, delta);
 
-    this.camera.getWorldDirection(this._camDir);
-    const playerAngle = Math.atan2(this._camDir.x, this._camDir.z);
+    // Throttle Radar geometry/position snapshots (~20 Hz)
+    this.radarEmitAccum += delta;
+    if (this.radarEmitAccum >= 0.05) {
+      this.radarEmitAccum = 0;
+      this.camera.getWorldDirection(this._camDir);
+      const playerAngle = Math.atan2(this._camDir.x, this._camDir.z);
 
-    const radarEnemies: { x: number; z: number; isDead: boolean; isBoss?: boolean }[] = this.enemies.map((b) => ({
-      x: b.position.x,
-      z: b.position.z,
-      isDead: b.isDead,
-    }));
-    if (this.boss && !this.boss.isDead) {
-      radarEnemies.push({
-        x: this.boss.position.x,
-        z: this.boss.position.z,
-        isDead: false,
-        isBoss: true,
-      });
+      const radarEnemies: { x: number; z: number; isDead: boolean; isBoss?: boolean }[] = [];
+      for (let i = 0; i < this.enemies.length; i++) {
+        const b = this.enemies[i];
+        radarEnemies.push({
+          x: b.position.x,
+          z: b.position.z,
+          isDead: b.isDead,
+        });
+      }
+      if (this.boss && !this.boss.isDead) {
+        radarEnemies.push({
+          x: this.boss.position.x,
+          z: this.boss.position.z,
+          isDead: false,
+          isBoss: true,
+        });
+      }
+
+      this.state.radarData = {
+        playerX: this.playerPos.x,
+        playerZ: this.playerPos.z,
+        playerAngle,
+        enemies: radarEnemies,
+        rects: this.arena.radarRects,
+      };
     }
 
-    this.state.radarData = {
-      playerX: this.playerPos.x,
-      playerZ: this.playerPos.z,
-      playerAngle,
-      enemies: radarEnemies,
-      rects: this.arena.radarRects,
-    };
-
-    this.emitState();
+    // Immediate emission on discrete HUD state transitions; throttle continuous telemetry to ~24 Hz
+    const discreteKey = `${this.state.wave}|${this.state.enemiesRemaining}|${this.state.fps}|${this.state.bossState ? Math.round(this.state.bossState.health) + ':' + this.state.bossState.attackLabel : 'none'}|${this.state.bossBanner ? this.state.bossBanner.title : ''}|${this.state.vampireHealEvent ? this.state.vampireHealEvent.id : 0}|${this.inGasHazard}|${this.isCrouching}|${this.slowRemaining > 0}|${Math.ceil(this.waveIntermissionTimer)}`;
+    this.hudEmitAccum += delta;
+    if (discreteKey !== this.lastDiscreteHudKey || this.hudEmitAccum >= 0.042) {
+      this.lastDiscreteHudKey = discreteKey;
+      this.hudEmitAccum = 0;
+      this.emitState();
+    }
   }
 
   private emitState() {
@@ -3051,10 +3321,17 @@ export class GameEngine {
   }
 
   public dispose() {
+    this.disposed = true;
     this.clearPointerLockNoticeTimer();
     cancelAnimationFrame(this.animFrameId);
+    if (this.softGlTimerId !== null) {
+      window.clearTimeout(this.softGlTimerId);
+      this.softGlTimerId = null;
+    }
     soundSystem.stopLobbyAmbient();
     soundSystem.stopBossMusic();
+    soundSystem.stopCutsceneSiren();
+    this.bossCutscene.dispose();
     document.removeEventListener('pointerlockerror', this.onPointerLockError, true);
     const canvas = this.renderer.domElement;
     canvas.removeEventListener('webglcontextlost', this.onContextLost);
@@ -3074,6 +3351,14 @@ export class GameEngine {
 
     this.activeGrenades.forEach((g) => this.scene.remove(g.mesh));
     this.clearBossHazards();
+    this.dartBodyGeo.dispose();
+    this.dartTipGeo.dispose();
+    this.dartBodyMat.dispose();
+    this.dartTipMat.dispose();
+    this.gasDomeGeo.dispose();
+    this.gasRingGeo.dispose();
+    this.gasDomeMat.dispose();
+    this.gasRingMat.dispose();
     this.scenePmremTex?.dispose();
     this.controls.removeEventListener('lock', this.onControlsLock);
     this.controls.removeEventListener('unlock', this.onControlsUnlock);

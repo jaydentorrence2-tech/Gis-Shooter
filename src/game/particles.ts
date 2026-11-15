@@ -1,9 +1,9 @@
 /**
  * Advanced Pooled VFX System for GIS Shooter: Tactical Edition
- * - Glowing Bullet Tracers
- * - Additive Impact Sparks & Elimination Explosions
- * - Ejected Brass & Shotgun Shell Casings with Floor Bounce + Clink
- * - Persistent Surface Bullet Hole Decals
+ * - O(1) Ring-Buffer Pooled Tracers, Particles & Brass/Shotgun Shells
+ * - Dynamic DrawRange & Conditional GPU Buffer Uploads (0 vertex uploads when idle)
+ * - Pooled Shockwave Rings (zero standalone rAF loops or runtime PointLights)
+ * - Cached Floating Damage-Number Textures & Persistent Bullet Hole Decals
  */
 
 import * as THREE from 'three';
@@ -38,9 +38,17 @@ interface ShellCasing {
   active: boolean;
 }
 
+interface ShockwaveRing {
+  mesh: THREE.Mesh;
+  mat: THREE.MeshBasicMaterial;
+  life: number;
+  maxLife: number;
+  maxScale: number;
+  active: boolean;
+}
+
 interface FloatingDamage {
   sprite: THREE.Sprite;
-  tex: THREE.CanvasTexture;
   mat: THREE.SpriteMaterial;
   velocity: THREE.Vector3;
   life: number;
@@ -52,22 +60,26 @@ interface FloatingDamage {
 export class ParticleSystem {
   private scene: THREE.Scene;
 
-  // 1. Tracers
+  // 1. Tracers (O(1) ring cursor)
   private tracers: Tracer[] = [];
   private maxTracers = 48;
+  private tracerCursor = 0;
 
-  // 2. Sparks & Debris Points
+  // 2. Sparks & Debris Points (O(1) ring cursor + drawRange)
   private maxParticles = 700;
+  private particleCursor = 0;
   private particleGeo: THREE.BufferGeometry;
   private particleMat: THREE.PointsMaterial;
   private particlePoints: THREE.Points;
   private particlePool: Particle[] = [];
   private posArray: Float32Array;
   private colorArray: Float32Array;
+  private hadActiveParticles = false;
 
-  // 3. Ejected Brass / Shotgun Shell Casings
+  // 3. Ejected Brass / Shotgun Shell Casings (O(1) ring cursor)
   private shells: ShellCasing[] = [];
   private maxShells = 36;
+  private shellCursor = 0;
   private shellGeo: THREE.CylinderGeometry;
   private brassMat: THREE.MeshStandardMaterial;
   private shotgunHullMat: THREE.MeshStandardMaterial;
@@ -79,14 +91,20 @@ export class ParticleSystem {
   private decalGeo: THREE.PlaneGeometry;
   private decalMat: THREE.MeshBasicMaterial;
 
-  // 5. World-Space Floating Damage Numbers
+  // 5. Pooled Shockwave Rings (integrated into update())
+  private shockwaves: ShockwaveRing[] = [];
+  private shockwaveGeo: THREE.RingGeometry;
+  private shockwaveCursor = 0;
+
+  // 6. World-Space Floating Damage Numbers + LRU Texture Cache
   private floatingDamages: FloatingDamage[] = [];
   private maxFloatingDamages = 28;
+  private damageTexCache = new Map<string, THREE.CanvasTexture>();
+  private maxDamageTexCache = 64;
 
   // Graphics Quality Scaling
   private particleScale = 1.0;
   private disableShells = false;
-  private disableLights = false;
 
   // Scratch vectors (zero GC in loop)
   private _p1 = new THREE.Vector3();
@@ -128,6 +146,7 @@ export class ParticleSystem {
     this.particleGeo = new THREE.BufferGeometry();
     this.particleGeo.setAttribute('position', new THREE.BufferAttribute(this.posArray, 3));
     this.particleGeo.setAttribute('color', new THREE.BufferAttribute(this.colorArray, 3));
+    this.particleGeo.setDrawRange(0, 0);
 
     const pCanvas = document.createElement('canvas');
     pCanvas.width = 64;
@@ -153,6 +172,7 @@ export class ParticleSystem {
 
     this.particlePoints = new THREE.Points(this.particleGeo, this.particleMat);
     this.particlePoints.frustumCulled = false;
+    this.particlePoints.visible = false;
     this.scene.add(this.particlePoints);
 
     for (let i = 0; i < this.maxParticles; i++) {
@@ -211,11 +231,74 @@ export class ParticleSystem {
       this.scene.add(decal);
       this.decals.push(decal);
     }
+
+    // Pooled Shockwave Rings (8 simultaneous rings max)
+    this.shockwaveGeo = new THREE.RingGeometry(0.28, 0.65, 32);
+    this.shockwaveGeo.rotateX(-Math.PI / 2);
+    for (let i = 0; i < 8; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x67e8f9,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const mesh = new THREE.Mesh(this.shockwaveGeo, mat);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.shockwaves.push({
+        mesh,
+        mat,
+        life: 0,
+        maxLife: 0.42,
+        maxScale: 15,
+        active: false,
+      });
+    }
+  }
+
+  private nextParticleSlot(): Particle {
+    for (let step = 0; step < this.maxParticles; step++) {
+      const idx = (this.particleCursor + step) % this.maxParticles;
+      if (!this.particlePool[idx].active) {
+        this.particleCursor = (idx + 1) % this.maxParticles;
+        return this.particlePool[idx];
+      }
+    }
+    const p = this.particlePool[this.particleCursor];
+    this.particleCursor = (this.particleCursor + 1) % this.maxParticles;
+    return p;
+  }
+
+  private spawnShockwave(pos: THREE.Vector3, colorHex: number, maxLife: number, maxScale: number) {
+    const sw = this.shockwaves[this.shockwaveCursor];
+    this.shockwaveCursor = (this.shockwaveCursor + 1) % this.shockwaves.length;
+    sw.active = true;
+    sw.life = 0;
+    sw.maxLife = maxLife;
+    sw.maxScale = maxScale;
+    sw.mat.color.setHex(colorHex);
+    sw.mat.opacity = 0.92;
+    sw.mesh.position.set(pos.x, Math.max(0.14, pos.y + 0.1), pos.z);
+    sw.mesh.scale.setScalar(1);
+    sw.mesh.visible = true;
   }
 
   public addTracer(start: THREE.Vector3, end: THREE.Vector3, colorHex = 0x06b6d4) {
-    const tracer = this.tracers.find((t) => !t.active);
-    if (!tracer) return;
+    let tracer: Tracer | null = null;
+    for (let step = 0; step < this.maxTracers; step++) {
+      const idx = (this.tracerCursor + step) % this.maxTracers;
+      if (!this.tracers[idx].active) {
+        this.tracerCursor = (idx + 1) % this.maxTracers;
+        tracer = this.tracers[idx];
+        break;
+      }
+    }
+    if (!tracer) {
+      tracer = this.tracers[this.tracerCursor];
+      this.tracerCursor = (this.tracerCursor + 1) % this.maxTracers;
+    }
 
     tracer.start.copy(start);
     tracer.end.copy(end);
@@ -232,7 +315,6 @@ export class ParticleSystem {
     if (preset === 'potato') {
       this.particleScale = 0.4;
       this.disableShells = true;
-      this.disableLights = true;
       for (let i = 0; i < this.shells.length; i++) {
         this.shells[i].active = false;
         this.shells[i].mesh.visible = false;
@@ -240,11 +322,9 @@ export class ParticleSystem {
     } else if (preset === 'medium') {
       this.particleScale = 0.68;
       this.disableShells = false;
-      this.disableLights = false;
     } else {
       this.particleScale = 1.0;
       this.disableShells = false;
-      this.disableLights = false;
     }
   }
 
@@ -252,9 +332,7 @@ export class ParticleSystem {
     const baseCount = isEnemyHit ? 20 : 12;
     const count = Math.max(3, Math.round(baseCount * this.particleScale));
     for (let i = 0; i < count; i++) {
-      const p = this.particlePool.find((part) => !part.active);
-      if (!p) break;
-
+      const p = this.nextParticleSlot();
       p.active = true;
       p.position.copy(pos);
       p.life = 0;
@@ -297,7 +375,15 @@ export class ParticleSystem {
     isShotgun = false
   ) {
     if (this.disableShells) return;
-    const shell = this.shells.find((s) => !s.active);
+    let shell: ShellCasing | null = null;
+    for (let step = 0; step < this.maxShells; step++) {
+      const idx = (this.shellCursor + step) % this.maxShells;
+      if (!this.shells[idx].active) {
+        this.shellCursor = (idx + 1) % this.maxShells;
+        shell = this.shells[idx];
+        break;
+      }
+    }
     if (!shell) return;
 
     shell.active = true;
@@ -306,12 +392,12 @@ export class ParticleSystem {
     shell.bounces = 0;
 
     shell.mesh.material = isShotgun ? this.shotgunHullMat : this.brassMat;
-    shell.mesh.scale.set(isShotgun ? 1.35 : 1, isShotgun ? 1.35 : 1, isShotgun ? 1.35 : 1);
+    const sc = isShotgun ? 1.35 : 1;
+    shell.mesh.scale.set(sc, sc, sc);
     shell.mesh.position.copy(origin);
     shell.mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
     shell.mesh.visible = true;
 
-    // Eject to the right and slightly upward/backward
     shell.velocity
       .copy(right)
       .multiplyScalar(2.4 + Math.random() * 1.1)
@@ -328,11 +414,9 @@ export class ParticleSystem {
   public addExplosion(pos: THREE.Vector3) {
     const count = Math.max(12, Math.round(48 * this.particleScale));
     for (let i = 0; i < count; i++) {
-      const p = this.particlePool.find((part) => !part.active);
-      if (!p) break;
-
+      const p = this.nextParticleSlot();
       p.active = true;
-      p.position.copy(pos).add(new THREE.Vector3(0, 1.0, 0));
+      p.position.set(pos.x, pos.y + 1.0, pos.z);
       p.life = 0;
       p.maxLife = 0.45 + Math.random() * 0.45;
 
@@ -350,14 +434,11 @@ export class ParticleSystem {
   }
 
   public addFlashFragExplosion(pos: THREE.Vector3) {
-    // High-energy cyan/white/amber radial concussion burst
     const count = Math.max(18, Math.round(72 * this.particleScale));
     for (let i = 0; i < count; i++) {
-      const p = this.particlePool.find((part) => !part.active);
-      if (!p) break;
-
+      const p = this.nextParticleSlot();
       p.active = true;
-      p.position.copy(pos).add(new THREE.Vector3(0, 0.25, 0));
+      p.position.set(pos.x, pos.y + 0.25, pos.z);
       p.life = 0;
       p.maxLife = 0.35 + Math.random() * 0.45;
 
@@ -376,60 +457,18 @@ export class ParticleSystem {
         .multiplyScalar(7 + Math.random() * 14);
     }
 
-    // Expanding shockwave ring + flash light
-    const ringGeo = new THREE.RingGeometry(0.25, 0.6, 32);
-    ringGeo.rotateX(-Math.PI / 2);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x67e8f9,
-      transparent: true,
-      opacity: 0.9,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.copy(pos).setY(Math.max(0.15, pos.y + 0.1));
-    this.scene.add(ring);
-
-    let flash: THREE.PointLight | null = null;
-    if (!this.disableLights) {
-      flash = new THREE.PointLight(0x7dd3fc, 28, 22, 1.6);
-      flash.position.copy(pos).add(new THREE.Vector3(0, 0.6, 0));
-      this.scene.add(flash);
-    }
-
-    const start = performance.now();
-    const tick = () => {
-      const t = (performance.now() - start) / 420;
-      if (t >= 1) {
-        this.scene.remove(ring);
-        if (flash) this.scene.remove(flash);
-        ringGeo.dispose();
-        ringMat.dispose();
-        return;
-      }
-      const scale = 1 + t * 15;
-      ring.scale.setScalar(scale);
-      ringMat.opacity = (1 - t) * 0.9;
-      if (flash) flash.intensity = (1 - t) * 28;
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+    this.spawnShockwave(pos, 0x67e8f9, 0.42, 15);
   }
 
   public addBossEntranceMist(pos: THREE.Vector3) {
     const count = Math.max(24, Math.round(90 * this.particleScale));
     for (let i = 0; i < count; i++) {
-      const p = this.particlePool.find((part) => !part.active);
-      if (!p) break;
-
+      const p = this.nextParticleSlot();
       p.active = true;
-      p.position.copy(pos).add(
-        new THREE.Vector3(
-          (Math.random() - 0.5) * 3.4,
-          0.25 + Math.random() * 2.2,
-          (Math.random() - 0.5) * 3.4
-        )
+      p.position.set(
+        pos.x + (Math.random() - 0.5) * 3.4,
+        pos.y + 0.25 + Math.random() * 2.2,
+        pos.z + (Math.random() - 0.5) * 3.4
       );
       p.life = 0;
       p.maxLife = 0.8 + Math.random() * 0.9;
@@ -446,44 +485,25 @@ export class ParticleSystem {
         .multiplyScalar(3.5 + Math.random() * 7.5);
     }
 
-    const ringGeo = new THREE.RingGeometry(0.4, 0.85, 32);
-    ringGeo.rotateX(-Math.PI / 2);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0xf43f5e,
-      transparent: true,
-      opacity: 0.92,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.position.set(pos.x, 0.14, pos.z);
-    this.scene.add(ring);
-
-    const start = performance.now();
-    const tick = () => {
-      const t = (performance.now() - start) / 720;
-      if (t >= 1) {
-        this.scene.remove(ring);
-        ringGeo.dispose();
-        ringMat.dispose();
-        return;
-      }
-      ring.scale.setScalar(1 + t * 14);
-      ringMat.opacity = (1 - t) * 0.92;
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+    this.spawnShockwave(pos, 0xf43f5e, 0.72, 14);
   }
 
-  public addFloatingDamage(pos: THREE.Vector3, amount: number, isCrit: boolean) {
-    if (amount <= 0) return;
-    if (this.floatingDamages.length >= this.maxFloatingDamages) {
-      const oldest = this.floatingDamages.shift();
-      if (oldest) {
-        this.scene.remove(oldest.sprite);
-        oldest.tex.dispose();
-        oldest.mat.dispose();
+  private getDamageTexture(roundedAmount: number, isCrit: boolean): THREE.CanvasTexture {
+    const key = `${roundedAmount}_${isCrit ? 1 : 0}`;
+    const cached = this.damageTexCache.get(key);
+    if (cached) {
+      // Refresh LRU position
+      this.damageTexCache.delete(key);
+      this.damageTexCache.set(key, cached);
+      return cached;
+    }
+
+    if (this.damageTexCache.size >= this.maxDamageTexCache) {
+      const oldestKey = this.damageTexCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        const oldTex = this.damageTexCache.get(oldestKey);
+        this.damageTexCache.delete(oldestKey);
+        oldTex?.dispose();
       }
     }
 
@@ -491,7 +511,7 @@ export class ParticleSystem {
     canvas.width = 256;
     canvas.height = 128;
     const ctx = canvas.getContext('2d')!;
-    const label = isCrit ? `${Math.round(amount)}!` : `${Math.round(amount)}`;
+    const label = isCrit ? `${roundedAmount}!` : `${roundedAmount}`;
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -516,6 +536,21 @@ export class ParticleSystem {
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
+    this.damageTexCache.set(key, tex);
+    return tex;
+  }
+
+  public addFloatingDamage(pos: THREE.Vector3, amount: number, isCrit: boolean) {
+    if (amount <= 0) return;
+    if (this.floatingDamages.length >= this.maxFloatingDamages) {
+      const oldest = this.floatingDamages.shift();
+      if (oldest) {
+        this.scene.remove(oldest.sprite);
+        oldest.mat.dispose();
+      }
+    }
+
+    const tex = this.getDamageTexture(Math.round(amount), isCrit);
     const mat = new THREE.SpriteMaterial({
       map: tex,
       transparent: true,
@@ -536,7 +571,6 @@ export class ParticleSystem {
 
     this.floatingDamages.push({
       sprite,
-      tex,
       mat,
       velocity: new THREE.Vector3(
         (Math.random() - 0.5) * 0.65,
@@ -577,7 +611,7 @@ export class ParticleSystem {
       posAttr.needsUpdate = true;
     }
 
-    // 2. Sparks
+    // 2. Sparks (compact active range + zero upload when idle)
     let activeIndex = 0;
     const gravity = -11.5;
 
@@ -602,26 +636,45 @@ export class ParticleSystem {
       }
 
       const lifeRatio = 1 - p.life / p.maxLife;
-      this.posArray[activeIndex * 3] = p.position.x;
-      this.posArray[activeIndex * 3 + 1] = p.position.y;
-      this.posArray[activeIndex * 3 + 2] = p.position.z;
+      const offset = activeIndex * 3;
+      this.posArray[offset] = p.position.x;
+      this.posArray[offset + 1] = p.position.y;
+      this.posArray[offset + 2] = p.position.z;
 
-      this.colorArray[activeIndex * 3] = p.color.r * lifeRatio;
-      this.colorArray[activeIndex * 3 + 1] = p.color.g * lifeRatio;
-      this.colorArray[activeIndex * 3 + 2] = p.color.b * lifeRatio;
+      this.colorArray[offset] = p.color.r * lifeRatio;
+      this.colorArray[offset + 1] = p.color.g * lifeRatio;
+      this.colorArray[offset + 2] = p.color.b * lifeRatio;
       activeIndex++;
     }
 
-    for (let i = activeIndex; i < this.maxParticles; i++) {
-      this.posArray[i * 3] = 0;
-      this.posArray[i * 3 + 1] = -999;
-      this.posArray[i * 3 + 2] = 0;
+    if (activeIndex > 0) {
+      this.particlePoints.visible = true;
+      this.particleGeo.setDrawRange(0, activeIndex);
+      this.particleGeo.attributes.position.needsUpdate = true;
+      this.particleGeo.attributes.color.needsUpdate = true;
+      this.hadActiveParticles = true;
+    } else if (this.hadActiveParticles) {
+      this.particlePoints.visible = false;
+      this.particleGeo.setDrawRange(0, 0);
+      this.hadActiveParticles = false;
     }
 
-    this.particleGeo.attributes.position.needsUpdate = true;
-    this.particleGeo.attributes.color.needsUpdate = true;
+    // 3. Pooled Shockwave Rings
+    for (let i = 0; i < this.shockwaves.length; i++) {
+      const sw = this.shockwaves[i];
+      if (!sw.active) continue;
+      sw.life += delta;
+      const t = sw.life / sw.maxLife;
+      if (t >= 1) {
+        sw.active = false;
+        sw.mesh.visible = false;
+      } else {
+        sw.mesh.scale.setScalar(1 + t * sw.maxScale);
+        sw.mat.opacity = (1 - t) * 0.92;
+      }
+    }
 
-    // 3. Ejected Shell Casings
+    // 4. Ejected Shell Casings
     for (let i = 0; i < this.shells.length; i++) {
       const s = this.shells[i];
       if (!s.active) continue;
@@ -652,13 +705,12 @@ export class ParticleSystem {
       }
     }
 
-    // 4. Floating Damage Numbers
+    // 5. Floating Damage Numbers
     for (let i = this.floatingDamages.length - 1; i >= 0; i--) {
       const fd = this.floatingDamages[i];
       fd.life += delta;
       if (fd.life >= fd.maxLife) {
         this.scene.remove(fd.sprite);
-        fd.tex.dispose();
         fd.mat.dispose();
         this.floatingDamages.splice(i, 1);
         continue;
@@ -688,15 +740,24 @@ export class ParticleSystem {
     this.decalGeo.dispose();
     this.decalMat.dispose();
 
+    this.shockwaves.forEach((sw) => {
+      this.scene.remove(sw.mesh);
+      sw.mat.dispose();
+    });
+    this.shockwaveGeo.dispose();
+
     this.floatingDamages.forEach((fd) => {
       this.scene.remove(fd.sprite);
-      fd.tex.dispose();
       fd.mat.dispose();
     });
     this.floatingDamages = [];
 
+    this.damageTexCache.forEach((tex) => tex.dispose());
+    this.damageTexCache.clear();
+
     this.scene.remove(this.particlePoints);
     this.particleGeo.dispose();
+    this.particleMat.map?.dispose();
     this.particleMat.dispose();
   }
 }

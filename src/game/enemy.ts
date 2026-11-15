@@ -13,6 +13,28 @@ import { ArenaCollision } from './map';
 
 export type AIState = 'patrol' | 'chase' | 'attack' | 'dying' | 'dead';
 
+let sharedHbTex: THREE.CanvasTexture | null = null;
+let sharedHbGeo: THREE.PlaneGeometry | null = null;
+
+function getSharedHealthBarTexture(): THREE.CanvasTexture {
+  if (sharedHbTex) return sharedHbTex;
+  const hbCanvas = document.createElement('canvas');
+  hbCanvas.width = 64;
+  hbCanvas.height = 8;
+  const hbCtx = hbCanvas.getContext('2d')!;
+  hbCtx.fillStyle = '#ef4444';
+  hbCtx.fillRect(0, 0, 64, 8);
+  sharedHbTex = new THREE.CanvasTexture(hbCanvas);
+  sharedHbTex.colorSpace = THREE.SRGBColorSpace;
+  return sharedHbTex;
+}
+
+function getSharedHealthBarGeo(): THREE.PlaneGeometry {
+  if (sharedHbGeo) return sharedHbGeo;
+  sharedHbGeo = new THREE.PlaneGeometry(0.85, 0.1);
+  return sharedHbGeo;
+}
+
 export class EnemyBot {
   public id: string;
   public group: THREE.Group;
@@ -52,12 +74,16 @@ export class EnemyBot {
   private detectRange = 42;
   private damage: number;
 
+  public hitMeshes: THREE.Mesh[] = [];
+
   // Pre-allocated scratch vectors (zero GC in loop)
   private _raycaster = new THREE.Raycaster();
   private _eyeOrigin = new THREE.Vector3();
   private _toPlayerDir = new THREE.Vector3();
   private _strafeVec = new THREE.Vector3();
   private _moveStep = new THREE.Vector3();
+  private _gunMuzzle = new THREE.Vector3();
+  private _aimTarget = new THREE.Vector3();
 
   constructor(id: string, spawnPos: THREE.Vector3, patrolNodes: THREE.Vector3[], wave = 1) {
     this.id = id;
@@ -205,24 +231,22 @@ export class EnemyBot {
     this.bodyPivot.add(this.leftLegPivot);
     this.bodyPivot.add(this.rightLegPivot);
 
-    // 6. Floating Overhead Health Bar
-    const hbCanvas = document.createElement('canvas');
-    hbCanvas.width = 128;
-    hbCanvas.height = 16;
-    const hbCtx = hbCanvas.getContext('2d')!;
-    hbCtx.fillStyle = '#ef4444';
-    hbCtx.fillRect(0, 0, 128, 16);
-    const hbTex = new THREE.CanvasTexture(hbCanvas);
-
+    // 6. Floating Overhead Health Bar (shared texture & plane geometry)
     const hbMat = new THREE.MeshBasicMaterial({
-      map: hbTex,
+      map: getSharedHealthBarTexture(),
       side: THREE.DoubleSide,
       depthTest: false,
     });
-    this.healthBarMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 0.1), hbMat);
+    this.healthBarMesh = new THREE.Mesh(getSharedHealthBarGeo(), hbMat);
     this.healthBarMesh.position.y = 2.28;
     this.healthBarMesh.renderOrder = 999;
     this.group.add(this.healthBarMesh);
+
+    this.group.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh && child !== this.healthBarMesh) {
+        this.hitMeshes.push(child as THREE.Mesh);
+      }
+    });
   }
 
   public takeDamage(
@@ -393,15 +417,13 @@ export class EnemyBot {
         this.fireTimer = this.fireInterval;
         soundSystem.playEnemyShot();
 
-        const gunMuzzle = new THREE.Vector3();
-        this.gunMesh.getWorldPosition(gunMuzzle);
-
-        const aimTarget = new THREE.Vector3(
+        this.gunMesh.getWorldPosition(this._gunMuzzle);
+        this._aimTarget.set(
           playerPos.x + (Math.random() - 0.5) * 1.45,
           playerPos.y - 0.15 + (Math.random() - 0.5) * 0.75,
           playerPos.z + (Math.random() - 0.5) * 1.45
         );
-        onShootPlayer(gunMuzzle, aimTarget, this.damage);
+        onShootPlayer(this._gunMuzzle, this._aimTarget, this.damage);
       }
     }
 

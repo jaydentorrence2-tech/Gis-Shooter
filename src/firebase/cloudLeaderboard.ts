@@ -371,6 +371,70 @@ export async function upsertCloudPersonalBest(
   }
 }
 
+export async function migrateCloudCallsignEntry(
+  user: User | null,
+  oldCallsign: string,
+  newPayload: CloudScorePayload
+): Promise<CloudUpsertResult | null> {
+  if (!user) return null;
+  const oldKey = normalizeCallsignKey(oldCallsign);
+  const newKey = normalizeCallsignKey(newPayload.callsign);
+  if (!oldKey || !newKey || oldKey === newKey) return null;
+
+  const oldPath = `leaderboard/${oldKey}`;
+  const oldRef = doc(db, 'leaderboard', oldKey);
+
+  try {
+    const oldSnap = await getDoc(oldRef);
+    if (!oldSnap.exists()) return null;
+    const oldData = oldSnap.data();
+    if (String(oldData.ownerUid || '') !== user.uid) return null;
+
+    const oldScore = typeof oldData.score === 'number' ? oldData.score : 0;
+    const oldKills = typeof oldData.kills === 'number' ? oldData.kills : 0;
+    const oldHeadshots = typeof oldData.headshots === 'number' ? oldData.headshots : 0;
+    const oldWave = typeof oldData.wave === 'number' ? oldData.wave : 1;
+    const oldAccuracy = typeof oldData.accuracy === 'number' ? oldData.accuracy : 0;
+    const oldSurvival = typeof oldData.survivalSec === 'number' ? oldData.survivalSec : 60;
+    const oldXp = typeof oldData.xpEarned === 'number' ? oldData.xpEarned : 0;
+
+    const useOldBest = oldScore > newPayload.score;
+    const mergedPayload: CloudScorePayload = useOldBest
+      ? {
+          ...newPayload,
+          score: oldScore,
+          wave: Math.max(newPayload.wave, oldWave),
+          kills: Math.max(newPayload.kills, oldKills),
+          headshots: Math.max(newPayload.headshots, oldHeadshots),
+          accuracy: Math.max(newPayload.accuracy, oldAccuracy),
+          survivalSec: Math.max(newPayload.survivalSec, oldSurvival),
+          xpEarned: Math.max(newPayload.xpEarned, oldXp),
+        }
+      : newPayload;
+
+    const upsertRes = await upsertCloudPersonalBest(user, mergedPayload);
+    if (
+      upsertRes.status === 'created' ||
+      upsertRes.status === 'updated_pb' ||
+      upsertRes.status === 'kept_pb'
+    ) {
+      try {
+        await deleteDoc(oldRef);
+      } catch (delErr) {
+        if (isPermissionError(delErr)) {
+          handleFirestoreError(delErr, OperationType.DELETE, oldPath);
+        }
+      }
+    }
+    return upsertRes;
+  } catch (error) {
+    if (isPermissionError(error)) {
+      handleFirestoreError(error, OperationType.GET, oldPath);
+    }
+    return null;
+  }
+}
+
 export async function deleteCloudLeaderboardEntry(callsignOrId: string): Promise<void> {
   const rawKey = callsignOrId.startsWith('cloud_')
     ? callsignOrId.slice('cloud_'.length)
@@ -385,6 +449,58 @@ export async function deleteCloudLeaderboardEntry(callsignOrId: string): Promise
     }
     throw error;
   }
+}
+
+function isBetterLeaderboardEntry(
+  candidate: LeaderboardEntry,
+  existing: LeaderboardEntry
+): boolean {
+  if (candidate.score !== existing.score) {
+    return candidate.score > existing.score;
+  }
+  if (candidate.timestamp !== existing.timestamp) {
+    return candidate.timestamp > existing.timestamp;
+  }
+  if (candidate.kills !== existing.kills) {
+    return candidate.kills > existing.kills;
+  }
+  return candidate.accuracy > existing.accuracy;
+}
+
+export function dedupeCloudLeaderboardEntries(
+  entries: LeaderboardEntry[]
+): LeaderboardEntry[] {
+  // Pass 1: Reduce by ownerUid so one operative account never renders twice after a rename
+  const byOwnerUid = new Map<string, LeaderboardEntry>();
+  const anonymousOrLegacy: LeaderboardEntry[] = [];
+
+  for (const entry of entries) {
+    const uid = entry.ownerUid?.trim();
+    if (!uid) {
+      anonymousOrLegacy.push(entry);
+      continue;
+    }
+    const prev = byOwnerUid.get(uid);
+    if (!prev || isBetterLeaderboardEntry(entry, prev)) {
+      byOwnerUid.set(uid, entry);
+    }
+  }
+
+  // Pass 2: Reduce by normalized callsign so identical callsigns never duplicate
+  const byCallsign = new Map<string, LeaderboardEntry>();
+  for (const entry of [...byOwnerUid.values(), ...anonymousOrLegacy]) {
+    const key = normalizeCallsignKey(entry.callsign || entry.id);
+    const prev = byCallsign.get(key);
+    if (!prev || isBetterLeaderboardEntry(entry, prev)) {
+      byCallsign.set(key, entry);
+    }
+  }
+
+  return Array.from(byCallsign.values()).sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.kills !== a.kills) return b.kills - a.kills;
+    return b.accuracy - a.accuracy;
+  });
 }
 
 export function subscribeCloudLeaderboard(
@@ -402,7 +518,7 @@ export function subscribeCloudLeaderboard(
   return onSnapshot(
     q,
     (snapshot) => {
-      const entries: LeaderboardEntry[] = snapshot.docs.map((docSnap) => {
+      const rawEntries: LeaderboardEntry[] = snapshot.docs.map((docSnap) => {
         const d = docSnap.data();
         const updatedMs =
           d.updatedAt && typeof d.updatedAt.toMillis === 'function'
@@ -432,6 +548,7 @@ export function subscribeCloudLeaderboard(
             typeof d.favoriteWeapon === 'string' ? d.favoriteWeapon : 'AR-X7 Tactical',
         };
       });
+      const entries = dedupeCloudLeaderboardEntries(rawEntries);
       onStatusChange?.('live');
       onData(entries);
     },

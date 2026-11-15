@@ -13,11 +13,14 @@ import {
   type CallsignLookupResult,
   hashOperativePin,
   lookupCloudCallsign,
+  migrateCloudCallsignEntry,
   normalizeCallsignDisplay,
+  normalizeCallsignKey,
   type OperativeAccountDoc,
   saveOperativeAccount,
   upsertCloudPersonalBest,
 } from '../firebase/cloudLeaderboard';
+import { migrateLocalCallsign } from '../game/leaderboard';
 import { AuthErrorNotice } from './AuthErrorNotice';
 
 interface ProfileModalProps {
@@ -163,6 +166,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
     setSaving(true);
     try {
+      const oldCallsign = profile.callsign;
+      const oldKey = operativeAccount?.primaryCallsign || normalizeCallsignKey(oldCallsign);
+      const newKey = normalizeCallsignKey(cleanCallsign);
+
+      migrateLocalCallsign(oldCallsign, cleanCallsign);
+
       onSave({
         callsign: cleanCallsign,
         accentColor: selectedColor,
@@ -178,21 +187,30 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         });
         onCloudAccountSaved?.(savedAcc);
 
-        if (profile.highScore > 0) {
-          await upsertCloudPersonalBest(cloudUser, {
-            callsign: cleanCallsign,
-            score: profile.highScore,
-            wave: profile.highestWave || 1,
-            kills: profile.totalKills,
-            headshots: profile.totalHeadshots,
-            accuracy,
-            survivalSec: Math.max(60, (profile.highestWave || 1) * 55),
-            xpEarned: profile.xp,
-            level: profile.level,
-            avatarColor: selectedColor,
-            favoriteWeapon: 'AR-X7 Tactical',
-            hasPin: Boolean(savedAcc.pinHash),
-          });
+        const scorePayload = {
+          callsign: cleanCallsign,
+          score: profile.highScore,
+          wave: profile.highestWave || 1,
+          kills: profile.totalKills,
+          headshots: profile.totalHeadshots,
+          accuracy,
+          survivalSec: Math.max(60, (profile.highestWave || 1) * 55),
+          xpEarned: profile.xp,
+          level: profile.level,
+          avatarColor: selectedColor,
+          favoriteWeapon: 'AR-X7 Tactical',
+          hasPin: Boolean(savedAcc.pinHash),
+        };
+
+        let migrated = null;
+        if (oldKey !== newKey) {
+          migrated = await migrateCloudCallsignEntry(cloudUser, oldKey, scorePayload);
+          if (!migrated && normalizeCallsignKey(oldCallsign) !== oldKey) {
+            migrated = await migrateCloudCallsignEntry(cloudUser, oldCallsign, scorePayload);
+          }
+        }
+        if (!migrated && profile.highScore > 0) {
+          await upsertCloudPersonalBest(cloudUser, scorePayload);
         }
       }
 

@@ -14,6 +14,9 @@ class SoundSystem {
   private bossMusicTimer: number | null = null;
   private bossMusicActive = false;
   private bossBeatStep = 0;
+  private cutsceneSirenTimer: number | null = null;
+  private cutsceneSirenActive = false;
+  private cutsceneSirenGain: GainNode | null = null;
   private isMuted = false;
   private volume = 0.7;
   private noiseBuffer: AudioBuffer | null = null;
@@ -992,6 +995,227 @@ class SoundSystem {
       window.clearInterval(this.bossMusicTimer);
       this.bossMusicTimer = null;
     }
+  }
+
+  public startCutsceneSiren() {
+    if (!this.ctx) this.init();
+    if (!this.ctx || !this.sfxGain) return;
+    this.resume();
+    this.stopCutsceneSiren();
+    if (this.isMuted) return;
+
+    this.cutsceneSirenActive = true;
+    const t = this.ctx.currentTime;
+    const bus = this.ctx.createGain();
+    bus.gain.setValueAtTime(0.001, t);
+    bus.gain.linearRampToValueAtTime(1.0, t + 0.12);
+    bus.connect(this.sfxGain);
+    this.cutsceneSirenGain = bus;
+
+    const triggerSweep = () => {
+      if (!this.ctx || !this.cutsceneSirenActive || !this.cutsceneSirenGain || this.isMuted) return;
+      if (this.ctx.state !== 'running') return;
+      const now = this.ctx.currentTime;
+
+      // Dual detuned industrial klaxon oscillators
+      [1, 1.012].forEach((detuneMult, idx) => {
+        if (!this.ctx || !this.cutsceneSirenGain) return;
+        const osc = this.ctx.createOscillator();
+        const bp = this.ctx.createBiquadFilter();
+        const g = this.ctx.createGain();
+        osc.type = idx === 0 ? 'sawtooth' : 'triangle';
+        osc.frequency.setValueAtTime(370 * detuneMult, now);
+        osc.frequency.linearRampToValueAtTime(840 * detuneMult, now + 0.44);
+        osc.frequency.linearRampToValueAtTime(340 * detuneMult, now + 0.96);
+
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(920, now);
+        bp.Q.value = 1.4;
+
+        g.gain.setValueAtTime(0.001, now);
+        g.gain.linearRampToValueAtTime(idx === 0 ? 0.22 : 0.14, now + 0.06);
+        g.gain.setValueAtTime(idx === 0 ? 0.2 : 0.12, now + 0.65);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.98);
+
+        osc.connect(bp);
+        bp.connect(g);
+        g.connect(this.cutsceneSirenGain);
+        osc.start(now);
+        osc.stop(now + 1.0);
+      });
+
+      // Subtle hangar echo tail
+      const echo = this.ctx.createOscillator();
+      const eg = this.ctx.createGain();
+      echo.type = 'sine';
+      echo.frequency.setValueAtTime(760, now + 0.22);
+      echo.frequency.exponentialRampToValueAtTime(380, now + 0.96);
+      eg.gain.setValueAtTime(0.001, now + 0.22);
+      eg.gain.linearRampToValueAtTime(0.055, now + 0.28);
+      eg.gain.exponentialRampToValueAtTime(0.001, now + 1.02);
+      echo.connect(eg);
+      eg.connect(this.cutsceneSirenGain);
+      echo.start(now + 0.22);
+      echo.stop(now + 1.04);
+    };
+
+    triggerSweep();
+    this.cutsceneSirenTimer = window.setInterval(triggerSweep, 1080);
+  }
+
+  public stopCutsceneSiren() {
+    this.cutsceneSirenActive = false;
+    if (this.cutsceneSirenTimer !== null) {
+      window.clearInterval(this.cutsceneSirenTimer);
+      this.cutsceneSirenTimer = null;
+    }
+    if (this.cutsceneSirenGain && this.ctx) {
+      const bus = this.cutsceneSirenGain;
+      this.cutsceneSirenGain = null;
+      try {
+        const now = this.ctx.currentTime;
+        bus.gain.cancelScheduledValues(now);
+        bus.gain.setValueAtTime(bus.gain.value, now);
+        bus.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+        window.setTimeout(() => {
+          try {
+            bus.disconnect();
+          } catch {
+            // ignore
+          }
+        }, 200);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  public playDropPodReentry() {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    this.resume();
+    const t = this.ctx.currentTime;
+
+    // Atmospheric plasma tear roar
+    const roar = this.createNoiseSource(1.35);
+    if (roar) {
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(240, t);
+      bp.frequency.exponentialRampToValueAtTime(1950, t + 0.85);
+      bp.frequency.exponentialRampToValueAtTime(520, t + 1.3);
+      bp.Q.value = 1.15;
+
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.linearRampToValueAtTime(0.42, t + 0.65);
+      g.gain.exponentialRampToValueAtTime(0.01, t + 1.32);
+
+      roar.connect(bp);
+      bp.connect(g);
+      g.connect(this.sfxGain);
+      roar.start(t);
+      roar.stop(t + 1.35);
+    }
+
+    // Supersonic Doppler pitch drop
+    const whistle = this.ctx.createOscillator();
+    const wg = this.ctx.createGain();
+    whistle.type = 'triangle';
+    whistle.frequency.setValueAtTime(620, t);
+    whistle.frequency.exponentialRampToValueAtTime(125, t + 1.25);
+    wg.gain.setValueAtTime(0.001, t);
+    wg.gain.linearRampToValueAtTime(0.18, t + 0.72);
+    wg.gain.exponentialRampToValueAtTime(0.001, t + 1.26);
+    whistle.connect(wg);
+    wg.connect(this.sfxGain);
+    whistle.start(t);
+    whistle.stop(t + 1.28);
+  }
+
+  public playDropPodImpact() {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    this.resume();
+    const t = this.ctx.currentTime;
+
+    // 1. Massive Sub-Bass Crater Thud
+    const sub = this.ctx.createOscillator();
+    const sg = this.ctx.createGain();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(145, t);
+    sub.frequency.exponentialRampToValueAtTime(22, t + 0.92);
+    sg.gain.setValueAtTime(1.0, t);
+    sg.gain.exponentialRampToValueAtTime(0.001, t + 0.95);
+    sub.connect(sg);
+    sg.connect(this.sfxGain);
+    sub.start(t);
+    sub.stop(t + 0.98);
+
+    // 2. Concussive Shockwave Blast Noise
+    const blast = this.createNoiseSource(1.1);
+    if (blast) {
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(4800, t);
+      lp.frequency.exponentialRampToValueAtTime(160, t + 1.05);
+      const bg = this.ctx.createGain();
+      bg.gain.setValueAtTime(0.95, t);
+      bg.gain.exponentialRampToValueAtTime(0.001, t + 1.08);
+      blast.connect(lp);
+      lp.connect(bg);
+      bg.connect(this.sfxGain);
+      blast.start(t);
+      blast.stop(t + 1.1);
+    }
+
+    // 3. Concrete & Metallic Debris Scatter Clatter
+    [0.08, 0.21, 0.36, 0.52].forEach((delay, idx) => {
+      if (!this.ctx || !this.sfxGain) return;
+      const clatter = this.createNoiseSource(0.14);
+      if (!clatter) return;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(1100 + idx * 420, t + delay);
+      bp.Q.value = 2.4;
+      const cg = this.ctx.createGain();
+      cg.gain.setValueAtTime(0.24 - idx * 0.04, t + delay);
+      cg.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.13);
+      clatter.connect(bp);
+      bp.connect(cg);
+      cg.connect(this.sfxGain);
+      clatter.start(t + delay);
+      clatter.stop(t + delay + 0.14);
+    });
+  }
+
+  public playBossRevealSting() {
+    if (!this.ctx || !this.sfxGain || this.isMuted) return;
+    this.resume();
+    const t = this.ctx.currentTime;
+
+    // Dramatic dark sci-fi brass/synth chord sting
+    const chord = [55, 110, 164.81, 220, 233.08];
+    chord.forEach((freq, idx) => {
+      if (!this.ctx || !this.sfxGain) return;
+      const osc = this.ctx.createOscillator();
+      const lp = this.ctx.createBiquadFilter();
+      const g = this.ctx.createGain();
+      osc.type = idx < 2 ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(freq, t);
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(320, t);
+      lp.frequency.exponentialRampToValueAtTime(1900, t + 0.28);
+      lp.frequency.exponentialRampToValueAtTime(420, t + 1.55);
+
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.linearRampToValueAtTime(idx < 2 ? 0.2 : 0.11, t + 0.09);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
+
+      osc.connect(lp);
+      lp.connect(g);
+      g.connect(this.sfxGain);
+      osc.start(t);
+      osc.stop(t + 1.65);
+    });
   }
 
   public playBossEntranceAlarm() {

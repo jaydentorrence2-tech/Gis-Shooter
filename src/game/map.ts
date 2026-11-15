@@ -209,22 +209,37 @@ export function buildTacticalArena(maxAnisotropy = 8): TacticalArena {
   createCoverBarrier(-18, 25, 6.5, 1.6, -Math.PI / 4);
   createCoverBarrier(18, 25, 6.5, 1.6, Math.PI / 4);
 
+  const crateOrangeMat = new THREE.MeshStandardMaterial({
+    map: crateOrange.map,
+    bumpMap: crateOrange.bumpMap,
+    bumpScale: 0.05,
+    roughness: 0.46,
+    metalness: 0.52,
+  });
+  const crateCyanMat = new THREE.MeshStandardMaterial({
+    map: crateCyan.map,
+    bumpMap: crateCyan.bumpMap,
+    bumpScale: 0.05,
+    roughness: 0.46,
+    metalness: 0.52,
+  });
+  const crateRedMat = new THREE.MeshStandardMaterial({
+    map: crateRed.map,
+    bumpMap: crateRed.bumpMap,
+    bumpScale: 0.05,
+    roughness: 0.46,
+    metalness: 0.52,
+  });
+
   // 6. Stacked Industrial Cargo Containers
   function createCrate(
     x: number,
     y: number,
     z: number,
     size = 2.4,
-    texSet = crateOrange,
+    mat: THREE.MeshStandardMaterial = crateOrangeMat,
     rotY = 0
   ) {
-    const mat = new THREE.MeshStandardMaterial({
-      map: texSet.map,
-      bumpMap: texSet.bumpMap,
-      bumpScale: 0.05,
-      roughness: 0.46,
-      metalness: 0.52,
-    });
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), mat);
     mesh.position.set(x, y + size / 2, z);
     mesh.rotation.y = rotY;
@@ -242,24 +257,24 @@ export function buildTacticalArena(maxAnisotropy = 8): TacticalArena {
   }
 
   // Stacked Clusters
-  createCrate(-18, 0, -8, 2.5, crateOrange, 0.08);
-  createCrate(-15.2, 0, -8, 2.5, crateCyan, -0.05);
-  createCrate(-16.6, 2.5, -8, 2.35, crateRed, 0.04);
+  createCrate(-18, 0, -8, 2.5, crateOrangeMat, 0.08);
+  createCrate(-15.2, 0, -8, 2.5, crateCyanMat, -0.05);
+  createCrate(-16.6, 2.5, -8, 2.35, crateRedMat, 0.04);
 
-  createCrate(18, 0, -8, 2.5, crateCyan, 0);
-  createCrate(20.8, 0, -8, 2.5, crateOrange, 0.1);
-  createCrate(19.4, 2.5, -8, 2.35, crateOrange, 0.14);
+  createCrate(18, 0, -8, 2.5, crateCyanMat, 0);
+  createCrate(20.8, 0, -8, 2.5, crateOrangeMat, 0.1);
+  createCrate(19.4, 2.5, -8, 2.35, crateOrangeMat, 0.14);
 
-  createCrate(-20, 0, 16, 2.5, crateRed, 0.14);
-  createCrate(-22.8, 0, 16, 2.5, crateOrange, -0.08);
-  createCrate(-21.4, 2.5, 16, 2.35, crateCyan, 0.05);
+  createCrate(-20, 0, 16, 2.5, crateRedMat, 0.14);
+  createCrate(-22.8, 0, 16, 2.5, crateOrangeMat, -0.08);
+  createCrate(-21.4, 2.5, 16, 2.35, crateCyanMat, 0.05);
 
-  createCrate(20, 0, 16, 2.5, crateCyan, 0.05);
-  createCrate(17.2, 0, 16, 2.5, crateRed, -0.1);
-  createCrate(18.6, 2.5, 16, 2.35, crateOrange, 0);
+  createCrate(20, 0, 16, 2.5, crateCyanMat, 0.05);
+  createCrate(17.2, 0, 16, 2.5, crateRedMat, -0.1);
+  createCrate(18.6, 2.5, 16, 2.35, crateOrangeMat, 0);
 
-  createCrate(-7.5, 0, 3.5, 2.1, crateOrange, 0.35);
-  createCrate(7.5, 0, -3.5, 2.1, crateCyan, -0.3);
+  createCrate(-7.5, 0, 3.5, 2.1, crateOrangeMat, 0.35);
+  createCrate(7.5, 0, -3.5, 2.1, crateCyanMat, -0.3);
 
   // 7. Second-Floor Connecting Bridge (Catwalk) & Access Ramps
   const platW = 14;
@@ -488,6 +503,15 @@ export function buildTacticalArena(maxAnisotropy = 8): TacticalArena {
     new THREE.Vector3(21, 0, 0),
     new THREE.Vector3(0, 0, 18)
   );
+
+  // Freeze static world matrices on arena geometry (skip rotating energy core rods)
+  const coreSet = new Set<THREE.Object3D>(energyCores);
+  arenaGroup.updateMatrixWorld(true);
+  arenaGroup.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh && !coreSet.has(obj)) {
+      obj.matrixAutoUpdate = false;
+    }
+  });
 
   return {
     group: arenaGroup,

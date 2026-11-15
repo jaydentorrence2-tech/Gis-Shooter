@@ -33,6 +33,7 @@ import {
 } from './firebase/client';
 import {
   type CloudUpsertResult,
+  dedupeCloudLeaderboardEntries,
   deleteCloudLeaderboardEntry,
   fetchOperativeAccount,
   normalizeCallsignKey,
@@ -82,7 +83,7 @@ export default function App() {
     });
 
     const unsubBoard = subscribeCloudLeaderboard(
-      (entries) => setCloudEntries(entries),
+      (entries) => setCloudEntries(dedupeCloudLeaderboardEntries(entries)),
       (status) => setCloudStatus(status)
     );
 
@@ -110,6 +111,17 @@ export default function App() {
     if (existingCloud) {
       if (existingCloud.ownerUid && existingCloud.ownerUid !== cloudUser.uid) return;
       if (existingCloud.score >= bestScore) return;
+    }
+
+    const existingOwnerEntry = cloudEntries.find(
+      (c) => c.ownerUid === cloudUser.uid
+    );
+    if (
+      existingOwnerEntry &&
+      normalizeCallsignKey(existingOwnerEntry.callsign) !== activeKey &&
+      existingOwnerEntry.score >= bestScore
+    ) {
+      return;
     }
 
     const syncTag = `${cloudUser.uid}:${activeKey}:${bestScore}`;
@@ -413,6 +425,7 @@ export default function App() {
       {!isInMenu &&
         gameState &&
         gameState.isPaused &&
+        !gameState.cutscene?.active &&
         !gameState.isInventoryOpen &&
         !gameState.isDead && (
           <PauseModal
@@ -491,8 +504,16 @@ export default function App() {
           onCloudAdminDelete={async (id, callsign) => {
             await deleteCloudLeaderboardEntry(id.startsWith('cloud_') ? id : callsign);
           }}
-          onSkipWave={() => engineRef.current?.adminSkipWave()}
-          onSummonBoss={() => engineRef.current?.adminSummonBossWave()}
+          onSkipWave={() => {
+            if (gameState && !gameState.isInMenu && gameState.wave + 1 === 10) {
+              setIsAdminOpen(false);
+            }
+            engineRef.current?.adminSkipWave();
+          }}
+          onSummonBoss={() => {
+            setIsAdminOpen(false);
+            engineRef.current?.adminSummonBossWave();
+          }}
           onKillAllHostiles={() => engineRef.current?.adminKillAllHostiles() ?? 0}
           onUpdateCheats={(updates) => engineRef.current?.setAdminCheats(updates)}
           onGrantMaxXp={() => engineRef.current?.adminGrantMaxXpAndUnlockAll()}

@@ -58,7 +58,7 @@ const WeaponMiniIcon: React.FC<{ type: string; active: boolean }> = ({ type, act
   }
 };
 
-export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
+export const HUD: React.FC<HUDProps> = React.memo(({ state, profile }) => {
   const radarCanvasRef = useRef<HTMLCanvasElement>(null);
   const activeWep = state.weapons[state.activeWeaponIndex] || state.weapons[0];
 
@@ -180,8 +180,95 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
     ctx.restore();
   }, [state.radarData, profile.accentColor]);
 
+  const cs = state.cutscene;
+  const inCutscene = Boolean(cs && cs.active);
+
   return (
     <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+      {/* 0. Module 19: Cinematic Boss Arrival Cutscene Layer */}
+      {inCutscene && cs && (
+        <div className="absolute inset-0 pointer-events-none z-30">
+          {/* Slow Crimson Alert Pulse Vignette (CSS composited) */}
+          <div
+            className="animate-cutscene-pulse absolute inset-0"
+            style={{
+              boxShadow: 'inset 0 0 155px rgba(225, 29, 72, 0.78)',
+              background:
+                'radial-gradient(circle at center, transparent 52%, rgba(127, 29, 29, 0.22) 100%)',
+            }}
+          />
+
+          {/* Glitch Horizontal Scan Bands (Impact / Alert / Reveal) */}
+          {cs.glitchIntensity > 0.04 && (
+            <div
+              className="absolute inset-0 overflow-hidden"
+              style={{ opacity: cs.glitchIntensity }}
+            >
+              <div
+                className="animate-glitch-strip absolute left-0 right-0 h-2 bg-rose-500/35"
+                style={{ top: '22%' }}
+              />
+              <div
+                className="animate-glitch-strip absolute left-0 right-0 h-3 bg-cyan-400/25"
+                style={{ top: '48%', animationDelay: '0.06s' }}
+              />
+              <div
+                className="animate-glitch-strip absolute left-0 right-0 h-1.5 bg-rose-400/45"
+                style={{ top: '74%', animationDelay: '0.11s' }}
+              />
+            </div>
+          )}
+
+          {/* 2.39:1 Cinematic Letterbox Framing */}
+          <div className="absolute top-0 left-0 right-0 h-[10vh] max-h-20 bg-[#05070c] border-b border-rose-500/35 flex items-center justify-between px-6">
+            <span className="font-mono-tech text-[11px] font-bold tracking-[0.2em] text-rose-400 uppercase">
+              ALERT CODE 10 · FACILITY CONTAINMENT BREACH
+            </span>
+            <span className="font-mono-tech text-[11px] text-slate-400 uppercase tabular-nums">
+              WAVE 10 // T+{cs.elapsed.toFixed(1)}S
+            </span>
+          </div>
+
+          <div className="absolute bottom-0 left-0 right-0 h-[10vh] max-h-20 bg-[#05070c] border-t border-rose-500/35 flex items-center justify-between px-6">
+            <span className="font-mono-tech text-[11px] text-rose-300/90 uppercase tracking-wider">
+              HOSTILE CLASS: HIGH-PRESSURE ANESTHETIC UNIT
+            </span>
+            {cs.canSkip && (
+              <span className="font-mono-tech text-xs font-bold tracking-wider text-amber-300 uppercase">
+                [SPACE] SKIP CUTSCENE
+              </span>
+            )}
+          </div>
+
+          {/* Futuristic Center Title Card */}
+          {cs.showTitleCard && (
+            <div className="animate-cutscene-title absolute inset-x-0 bottom-[14vh] flex justify-center px-4">
+              <div
+                className="relative max-w-4xl w-full bg-[#090d16]/92 border border-rose-500/80 px-8 py-5 text-center shadow-[0_0_55px_rgba(225,29,72,0.42)]"
+                style={{
+                  clipPath:
+                    'polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px)',
+                }}
+              >
+                <div className="font-mono-tech text-[11px] font-bold tracking-[0.28em] text-amber-300 uppercase mb-1.5">
+                  PRIORITY THREAT INTERCEPT
+                </div>
+                <div className="font-display text-2xl sm:text-3xl md:text-4xl font-bold tracking-[0.08em] text-white uppercase">
+                  [ WARNING: BOSS BATTLE — THE SPECIALIST ANESTESI ]
+                </div>
+                <div className="mt-2.5 flex items-center justify-center gap-4 font-mono-tech text-xs text-rose-300 uppercase tracking-widest">
+                  <span>SYRINGE BLASTER</span>
+                  <span className="text-slate-600" aria-hidden="true">/</span>
+                  <span>ANESTHETIC GAS</span>
+                  <span className="text-slate-600" aria-hidden="true">/</span>
+                  <span className="text-emerald-300">WEAKSPOT: DORSAL TANK</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 1. Damage Vignette & Flash-Frag Concussion Glare */}
       <div
         className="absolute inset-0 transition-opacity duration-150 pointer-events-none"
@@ -272,7 +359,7 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
       )}
 
       {/* 2. SR-50 Tactical Sniper Scope Overlay */}
-      {state.isScoped && !state.isInventoryOpen && !state.isPaused && (
+      {!inCutscene && state.isScoped && !state.isInventoryOpen && !state.isPaused && (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
           {/* Darkened outer peripheral mask */}
           <div
@@ -310,7 +397,8 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
       )}
 
       {/* 3. Top-Left: Map-Aware Radar & Wave Info */}
-      <div className="absolute top-4 left-4 flex items-start gap-3">
+      {!inCutscene && (
+        <div className="absolute top-4 left-4 flex items-start gap-3">
         <div className="relative bg-[#0C1017]/90 p-1.5 rounded-xl border border-cyan-500/40 shadow-lg">
           <canvas ref={radarCanvasRef} width={140} height={140} className="rounded-lg" />
           <div className="mt-1 px-1.5 flex justify-between text-[10px] font-mono-tech text-slate-400">
@@ -332,9 +420,11 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
           </div>
         </div>
       </div>
+      )}
 
       {/* 4. Top-Right: Real-Time FPS Counter & Kill Feed */}
-      <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5 max-w-sm">
+      {!inCutscene && (
+        <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5 max-w-sm">
         <div className="bg-[#0C1017]/90 border border-slate-700/80 rounded-lg px-3 py-1.5 flex items-center gap-2.5 text-xs font-mono-tech tabular-nums shadow-lg">
           <span
             className={`font-bold ${
@@ -393,9 +483,10 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
           </div>
         ))}
       </div>
+      )}
 
       {/* 5. Center Customizable Dynamic Crosshair, Hitmarker & Vampire Kill-Heal Popup */}
-      {!state.isInventoryOpen && !state.isPaused && (
+      {!inCutscene && !state.isInventoryOpen && !state.isPaused && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center">
           {state.vampireHealEvent && (
             <div
@@ -434,7 +525,8 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
       )}
 
       {/* 6. Bottom-Left: Hazard Status + Health & Armor */}
-      <div className="absolute bottom-6 left-6 flex flex-col gap-2">
+      {!inCutscene && (
+        <div className="absolute bottom-6 left-6 flex flex-col gap-2">
         {(state.slowRemaining > 0 || state.inGasHazard) && (
           <div className="flex flex-wrap gap-1.5">
             {state.slowRemaining > 0 && (
@@ -483,9 +575,11 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
           </div>
         </div>
       </div>
+      )}
 
       {/* 7. Bottom-Right: Fixed 4-Slot Loadout Indicator Cards, Flashlight & Ammo Counter */}
-      <div className="absolute bottom-6 right-6 flex items-end gap-3">
+      {!inCutscene && (
+        <div className="absolute bottom-6 right-6 flex items-end gap-3">
         <div className="flex flex-col gap-1.5">
           {state.weapons.slice(0, 4).map((w, idx) => {
             const isActive = state.activeWeaponIndex === idx;
@@ -594,11 +688,14 @@ export const HUD: React.FC<HUDProps> = ({ state, profile }) => {
           )}
         </div>
       </div>
+      )}
 
       {/* 8. Subtle Bottom Key Hint */}
-      <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-lg bg-[#0C1017]/85 border border-slate-800/80 text-[11px] font-mono-tech text-slate-400 whitespace-nowrap">
-        WASD Move · C Crouch · L-Click Fire · R-Click ADS · R Reload · F Light · 1–4 / Scroll Swap · Q Quick-Switch · Tab Inventory
-      </div>
+      {!inCutscene && (
+        <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-lg bg-[#0C1017]/85 border border-slate-800/80 text-[11px] font-mono-tech text-slate-400 whitespace-nowrap">
+          WASD Move · C Crouch · L-Click Fire · R-Click ADS · R Reload · F Light · 1–4 / Scroll Swap · Q Quick-Switch · Tab Inventory
+        </div>
+      )}
     </div>
   );
-};
+});
