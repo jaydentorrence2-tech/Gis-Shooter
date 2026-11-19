@@ -12,7 +12,7 @@ import { soundSystem } from '../audio/SoundSystem';
 import { LobbyFocusMode, TacticalLobby } from './lobby';
 import { buildTacticalArena, RadarRect, TacticalArena } from './map';
 import { ParticleSystem } from './particles';
-import { EnemyBot } from './enemy';
+import { EnemyBot, EnemyClass, EnemyHitZone } from './enemy';
 import { BossHitZone, BossSpecialist } from './boss';
 import {
   BOSS_LANDING_POS,
@@ -217,7 +217,7 @@ export class GameEngine {
   private arenaHemiLight: THREE.HemisphereLight;
   private arenaSunLight: THREE.DirectionalLight;
   private arenaRimLight: THREE.DirectionalLight;
-  private arenaPointLights: { light: THREE.PointLight; baseIntensity: number }[] = [];
+  private arenaPointLights: { light: THREE.PointLight | THREE.SpotLight; baseIntensity: number }[] = [];
   private originalMaterials = new WeakMap<THREE.Mesh, THREE.Material | THREE.Material[]>();
   private lambertMaterials = new WeakMap<THREE.Material, THREE.MeshLambertMaterial>();
 
@@ -436,15 +436,15 @@ export class GameEngine {
 
     this.controls = this.createPointerLockControls();
 
-    // 5. Balanced 3-Point Cyber-Night Lighting + Potato Mode Ambient Fallback
+    // 5. Cold Cyan Tech 3-Point Lighting + Potato Mode Ambient Fallback
     this.arenaAmbientLight = new THREE.AmbientLight(0xdbeafe, 1.35);
     this.arenaAmbientLight.visible = false;
     this.scene.add(this.arenaAmbientLight);
 
-    this.arenaHemiLight = new THREE.HemisphereLight(0x38bdf8, 0x0f172a, 0.72);
+    this.arenaHemiLight = new THREE.HemisphereLight(0x38bdf8, 0x09121e, 0.78);
     this.scene.add(this.arenaHemiLight);
 
-    this.arenaSunLight = new THREE.DirectionalLight(0xfef3c7, 1.85);
+    this.arenaSunLight = new THREE.DirectionalLight(0xdbeafe, 1.78);
     this.arenaSunLight.position.set(32, 48, 22);
     this.arenaSunLight.castShadow = !this.isSoftwareGl;
     this.arenaSunLight.shadow.mapSize.width = 2048;
@@ -460,7 +460,7 @@ export class GameEngine {
     this.arenaSunLight.shadow.normalBias = 0.02;
     this.scene.add(this.arenaSunLight);
 
-    this.arenaRimLight = new THREE.DirectionalLight(0x06b6d4, 0.55);
+    this.arenaRimLight = new THREE.DirectionalLight(0x06b6d4, 0.75);
     this.arenaRimLight.position.set(-35, 24, -30);
     this.scene.add(this.arenaRimLight);
 
@@ -540,9 +540,9 @@ export class GameEngine {
     this.arena = buildTacticalArena(maxAniso);
     this.scene.add(this.arena.group);
     this.arena.group.traverse((obj) => {
-      if ((obj as THREE.PointLight).isPointLight) {
-        const pl = obj as THREE.PointLight;
-        this.arenaPointLights.push({ light: pl, baseIntensity: pl.intensity });
+      if ((obj as THREE.PointLight).isPointLight || (obj as THREE.SpotLight).isSpotLight) {
+        const light = obj as THREE.PointLight | THREE.SpotLight;
+        this.arenaPointLights.push({ light, baseIntensity: light.intensity });
       }
     });
 
@@ -626,10 +626,10 @@ export class GameEngine {
 
     // 8. Initialize GameState
     this.state = {
-      health: 100,
-      maxHealth: 100,
-      armor: 100,
-      maxArmor: 100,
+      health: 600,
+      maxHealth: 600,
+      armor: 600,
+      maxArmor: 600,
       score: 0,
       wave: 1,
       enemiesRemaining: 0,
@@ -1460,8 +1460,8 @@ export class GameEngine {
     if (!this.state.adminCheats.infiniteAmmo) {
       med.currentAmmo--;
     }
-    this.state.health = Math.min(this.state.maxHealth, this.state.health + 60);
-    this.state.armor = Math.min(this.state.maxArmor, this.state.armor + 35);
+    this.state.health = Math.min(this.state.maxHealth, this.state.health + 360);
+    this.state.armor = Math.min(this.state.maxArmor, this.state.armor + 210);
     soundSystem.playHeal();
     this.emitState();
     return true;
@@ -1817,6 +1817,7 @@ export class GameEngine {
         let hitBot: EnemyBot | null = null;
         let hitBoss = false;
         let bossZone: BossHitZone = 'body';
+        let botZone: EnemyHitZone = 'body';
         let isHeadshot = false;
 
         let obj: THREE.Object3D | null = hit.object;
@@ -1827,7 +1828,10 @@ export class GameEngine {
               isHeadshot = true;
             } else if (hit.object.name === 'ENEMY_HEAD') {
               bossZone = 'head';
+              botZone = 'head';
               isHeadshot = true;
+            } else if (hit.object.name === 'ENEMY_SHIELD') {
+              botZone = 'shield';
             }
             if (this.boss && obj === this.boss.group) {
               hitBoss = true;
@@ -1854,13 +1858,13 @@ export class GameEngine {
             damageAgg.set(this.boss, { dmg: res.actualDmg, isCrit: res.isCrit, pos: hitPoint.clone() });
           }
           this.triggerHitmarker(res.isCrit);
-          this.particles.addImpactSparks(hitPoint, this._worldNormal, true);
+          this.particles.addImpactSparks(hitPoint, this._worldNormal, 'enemy');
           if (res.isDead) {
             this.handleBossDefeated(wep.shortName, bossZone);
           }
         } else if (hitBot && !hitBot.isDead) {
           hitCount++;
-          const res = hitBot.takeDamage(wep.damage, isHeadshot, headMult);
+          const res = hitBot.takeDamage(wep.damage, botZone, headMult);
           const prev = damageAgg.get(hitBot);
           if (prev) {
             prev.dmg += res.actualDmg;
@@ -1870,7 +1874,7 @@ export class GameEngine {
             damageAgg.set(hitBot, { dmg: res.actualDmg, isCrit: res.isHeadshot, pos: hitPoint.clone() });
           }
           this.triggerHitmarker(res.isHeadshot);
-          this.particles.addImpactSparks(hitPoint, this._worldNormal, true);
+          this.particles.addImpactSparks(hitPoint, this._worldNormal, res.hitShield ? 'shield' : 'enemy');
 
           if (res.isDead) {
             this.handleEnemyEliminated(hitBot, res.isHeadshot, wep.shortName);
@@ -1979,7 +1983,9 @@ export class GameEngine {
   }
 
   private handleEnemyEliminated(bot: EnemyBot, isHeadshot: boolean, wepName: string) {
-    this.particles.addExplosion(bot.position);
+    const expMode =
+      bot.enemyClass === 'drone' ? 'drone' : bot.enemyClass === 'juggernaut' ? 'juggernaut' : 'default';
+    this.particles.addExplosion(bot.position, expMode);
 
     const scoreGain = isHeadshot ? 250 : 100;
     const xpGain = isHeadshot ? 140 : 70;
@@ -2380,17 +2386,27 @@ export class GameEngine {
     const count = Math.min(8, 2 + Math.ceil((waveNum - 1) * 0.75));
     this.state.enemiesRemaining = count;
 
+    const pickEnemyClassForWave = (wNum: number, idx: number): EnemyClass => {
+      if (wNum <= 2) return 'assault';
+      if (wNum === 3) return idx % 2 === 1 ? 'drone' : 'assault';
+      if (idx === 0 || (wNum >= 7 && idx === 3)) return 'juggernaut';
+      if (idx % 3 === 1) return 'drone';
+      return 'assault';
+    };
+
     for (let i = 0; i < count; i++) {
       const spawnNode = this.arena.enemySpawns[i % this.arena.enemySpawns.length].clone();
       spawnNode.x += (Math.random() - 0.5) * 3.5;
       spawnNode.z += (Math.random() - 0.5) * 3.5;
       spawnNode.y = 0;
 
+      const enemyClass = pickEnemyClassForWave(waveNum, i);
       const bot = new EnemyBot(
         `UNIT-${i + 1 < 10 ? '0' : ''}${i + 1}`,
         spawnNode,
         this.arena.patrolNodes,
-        waveNum
+        waveNum,
+        enemyClass
       );
       this.enemies.push(bot);
       this.scene.add(bot.group);
@@ -2406,8 +2422,8 @@ export class GameEngine {
     soundSystem.stopCutsceneSiren();
     this.bossCutscene.resetAll();
     this.setBossAtmosphere(false);
-    this.state.health = 100;
-    this.state.armor = 100;
+    this.state.health = this.state.maxHealth;
+    this.state.armor = this.state.maxArmor;
     this.state.score = 0;
     this.state.isDead = false;
     this.state.isPaused = initialWave === 10 ? false : !autoLock;
@@ -2764,7 +2780,7 @@ export class GameEngine {
 
     // Gentle tactical regeneration during 15s Prep Phase
     if (this.waveIntermissionTimer > 0 && this.state.health < this.state.maxHealth) {
-      this.state.health = Math.min(this.state.maxHealth, this.state.health + 2.5 * delta);
+      this.state.health = Math.min(this.state.maxHealth, this.state.health + 15 * delta);
     }
 
     const prevEye = this.playerEyeHeight;
@@ -2865,7 +2881,7 @@ export class GameEngine {
     }
 
     // Low HP Warning Alert
-    if (this.state.health > 0 && this.state.health <= 25) {
+    if (this.state.health > 0 && this.state.health <= this.state.maxHealth * 0.25) {
       this.lowHpAlertTimer -= delta;
       if (this.lowHpAlertTimer <= 0) {
         this.lowHpAlertTimer = 1.6;

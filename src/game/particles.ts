@@ -328,30 +328,42 @@ export class ParticleSystem {
     }
   }
 
-  public addImpactSparks(pos: THREE.Vector3, normal: THREE.Vector3, isEnemyHit = false) {
-    const baseCount = isEnemyHit ? 20 : 12;
-    const count = Math.max(3, Math.round(baseCount * this.particleScale));
+  public addImpactSparks(
+    pos: THREE.Vector3,
+    normal: THREE.Vector3,
+    hitKind: boolean | 'wall' | 'enemy' | 'shield' = false
+  ) {
+    const kind = hitKind === true ? 'enemy' : hitKind === false ? 'wall' : hitKind;
+    const baseCount = kind === 'enemy' ? 22 : kind === 'shield' ? 24 : 16;
+    const count = Math.max(4, Math.round(baseCount * this.particleScale));
     for (let i = 0; i < count; i++) {
       const p = this.nextParticleSlot();
       p.active = true;
       p.position.copy(pos);
       p.life = 0;
       p.maxLife = 0.22 + Math.random() * 0.28;
-      if (isEnemyHit) {
-        p.color.setRGB(1.0, 0.18 + Math.random() * 0.2, 0.18);
+      if (kind === 'shield') {
+        p.color.setRGB(0.15 + Math.random() * 0.45, 0.88, 1.0);
+      } else if (kind === 'enemy') {
+        p.color.setRGB(1.0, 0.18 + Math.random() * 0.25, 0.14);
       } else {
-        p.color.setRGB(1.0, 0.72 + Math.random() * 0.25, 0.2);
+        // Hot white-gold core & bright amber metallic ricochet sparks
+        if (Math.random() > 0.68) {
+          p.color.setRGB(1.0, 0.96, 0.82);
+        } else {
+          p.color.setRGB(1.0, 0.68 + Math.random() * 0.28, 0.15);
+        }
       }
 
-      const spread = 0.75;
+      const spread = kind === 'wall' ? 0.92 : 0.78;
       p.velocity
         .set(
           normal.x + (Math.random() - 0.5) * spread,
-          normal.y + (Math.random() - 0.5) * spread + 0.35,
+          normal.y + (Math.random() - 0.5) * spread + 0.38,
           normal.z + (Math.random() - 0.5) * spread
         )
         .normalize()
-        .multiplyScalar(4.5 + Math.random() * 8.5);
+        .multiplyScalar(5.0 + Math.random() * 9.5);
     }
   }
 
@@ -411,26 +423,39 @@ export class ParticleSystem {
     );
   }
 
-  public addExplosion(pos: THREE.Vector3) {
-    const count = Math.max(12, Math.round(48 * this.particleScale));
+  public addExplosion(
+    pos: THREE.Vector3,
+    colorMode: 'default' | 'drone' | 'juggernaut' = 'default'
+  ) {
+    const base = colorMode === 'juggernaut' ? 68 : 52;
+    const count = Math.max(14, Math.round(base * this.particleScale));
     for (let i = 0; i < count; i++) {
       const p = this.nextParticleSlot();
       p.active = true;
-      p.position.set(pos.x, pos.y + 1.0, pos.z);
+      p.position.set(pos.x, pos.y + (colorMode === 'drone' ? 1.2 : 1.0), pos.z);
       p.life = 0;
-      p.maxLife = 0.45 + Math.random() * 0.45;
+      p.maxLife = 0.45 + Math.random() * 0.48;
 
-      if (Math.random() > 0.35) {
-        p.color.setRGB(1.0, 0.45 + Math.random() * 0.3, 0.1);
+      if (colorMode === 'drone') {
+        p.color.setRGB(
+          Math.random() > 0.4 ? 0.12 : 1.0,
+          0.68 + Math.random() * 0.25,
+          Math.random() > 0.4 ? 1.0 : 0.15
+        );
+      } else if (Math.random() > 0.32) {
+        p.color.setRGB(1.0, 0.45 + Math.random() * 0.32, 0.1);
       } else {
-        p.color.setRGB(0.05, 0.85, 1.0);
+        p.color.setRGB(0.08, 0.88, 1.0);
       }
 
       p.velocity
-        .set((Math.random() - 0.5) * 2, Math.random() * 1.8, (Math.random() - 0.5) * 2)
+        .set((Math.random() - 0.5) * 2, Math.random() * 1.9, (Math.random() - 0.5) * 2)
         .normalize()
-        .multiplyScalar(5 + Math.random() * 10);
+        .multiplyScalar(5.5 + Math.random() * 11);
     }
+
+    const swColor = colorMode === 'drone' ? 0x38bdf8 : colorMode === 'juggernaut' ? 0xf59e0b : 0xff5722;
+    this.spawnShockwave(pos, swColor, 0.32, colorMode === 'juggernaut' ? 7.5 : 5.2);
   }
 
   public addFlashFragExplosion(pos: THREE.Vector3) {

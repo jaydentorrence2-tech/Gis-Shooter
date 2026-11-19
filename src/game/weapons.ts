@@ -144,7 +144,7 @@ const NANO_MEDKIT_DEF: WeaponDef = {
   range: 0,
   caliber: 'BIO-GEL',
   description:
-    'Pressurized nanite combat injector restoring +60 HP and +35 Armor immediately on activation.',
+    'Pressurized nanite combat injector restoring +360 HP and +210 Shield immediately on activation.',
 };
 
 export const SLOT4_OPTIONS: WeaponDef[] = [DESERT_PYTHON_DEF, NANO_MEDKIT_DEF];
@@ -386,10 +386,15 @@ function addPicatinnyTeeth(
   width = 0.022
 ) {
   const m = getMats();
-  const geo = new THREE.BoxGeometry(width, 0.005, 0.011);
+  const len = Math.abs(zStart - zEnd) + 0.02;
+  const railSpine = new THREE.Mesh(new THREE.BoxGeometry(width * 0.62, 0.004, len), m.gunmetal);
+  railSpine.position.set(x, y - 0.0025, (zStart + zEnd) * 0.5);
+  group.add(railSpine);
+
+  const toothGeo = new THREE.BoxGeometry(width, 0.0055, 0.0095);
   for (let z = zStart; z >= zEnd; z -= step) {
-    const tooth = new THREE.Mesh(geo, m.darkSteel);
-    tooth.position.set(x, y, z);
+    const tooth = new THREE.Mesh(toothGeo, m.darkSteel);
+    tooth.position.set(x, y + 0.0005, z);
     group.add(tooth);
   }
 }
@@ -573,21 +578,43 @@ export function createARX7ViewModel(): THREE.Group {
   stockPad.position.set(0, -0.015, 0.34);
   root.add(stockPad);
 
-  // Holographic Optic with Reflective Physical Glass
-  const holoHood = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.048, 0.072), m.darkSteel);
-  holoHood.position.set(0, 0.088, -0.04);
-  root.add(holoHood);
+  // Holographic Optic with Open Shroud, Reflective Glass & Illuminated Reticle
+  const holoBase = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.014, 0.074), m.gunmetal);
+  holoBase.position.set(0, 0.068, -0.04);
+  root.add(holoBase);
+
+  [-0.021, 0.021].forEach((hx) => {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.038, 0.068), m.darkSteel);
+    wall.position.set(hx, 0.09, -0.04);
+    root.add(wall);
+  });
+  const holoTop = new THREE.Mesh(new THREE.BoxGeometry(0.049, 0.007, 0.068), m.darkSteel);
+  holoTop.position.set(0, 0.111, -0.04);
+  root.add(holoTop);
 
   const holoGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.036, 0.034), m.opticGlass);
-  holoGlass.position.set(0, 0.088, -0.042);
+  holoGlass.position.set(0, 0.091, -0.042);
   root.add(holoGlass);
 
-  const reticle = new THREE.Mesh(
-    new THREE.RingGeometry(0.003, 0.0055, 16),
-    new THREE.MeshBasicMaterial({ color: 0x00f0ff, side: THREE.DoubleSide })
-  );
-  reticle.position.set(0, 0.088, -0.04);
+  const reticleMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, side: THREE.DoubleSide });
+  const reticle = new THREE.Mesh(new THREE.RingGeometry(0.0042, 0.0058, 20), reticleMat);
+  reticle.position.set(0, 0.091, -0.04);
   root.add(reticle);
+
+  const reticleDot = new THREE.Mesh(new THREE.CircleGeometry(0.0012, 8), reticleMat);
+  reticleDot.position.set(0, 0.091, -0.0395);
+  root.add(reticleDot);
+
+  [
+    [0, 0.0078, 0.0012, 0.0042],
+    [0, -0.0078, 0.0012, 0.0042],
+    [0.0078, 0, 0.0042, 0.0012],
+    [-0.0078, 0, 0.0042, 0.0012],
+  ].forEach(([tx, ty, tw, th]) => {
+    const tick = new THREE.Mesh(new THREE.PlaneGeometry(tw, th), reticleMat);
+    tick.position.set(tx, 0.091 + ty, -0.04);
+    root.add(tick);
+  });
 
   // Angled Foregrip + Modular Laser Sight + Underbarrel Flashlight
   const fg = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.09, 10), m.polymer);
@@ -703,7 +730,7 @@ export function createVectorV9ViewModel(): THREE.Group {
   opticBase.position.set(0, 0.064, -0.02);
   root.add(opticBase);
 
-  const opticRing = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.004, 8, 20), m.gunmetal);
+  const opticRing = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0042, 10, 22), m.gunmetal);
   opticRing.position.set(0, 0.084, -0.02);
   root.add(opticRing);
 
@@ -711,7 +738,14 @@ export function createVectorV9ViewModel(): THREE.Group {
   opticLens.position.set(0, 0.084, -0.021);
   root.add(opticLens);
 
-  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.0028, 10), m.emeraldEmit);
+  const reflexRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.0045, 0.0058, 16),
+    m.emeraldEmit
+  );
+  reflexRing.position.set(0, 0.084, -0.0195);
+  root.add(reflexRing);
+
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.0018, 10), m.emeraldEmit);
   dot.position.set(0, 0.084, -0.019);
   root.add(dot);
 
@@ -895,6 +929,17 @@ export function createSR50ViewModel(): THREE.Group {
   const rearLens = new THREE.Mesh(new THREE.CircleGeometry(0.018, 16), m.opticGlass);
   rearLens.position.set(0, 0.088, 0.085);
   root.add(rearLens);
+
+  const scopeCollar = new THREE.Mesh(
+    new THREE.TorusGeometry(0.021, 0.0022, 8, 18),
+    m.cyanEmit
+  );
+  scopeCollar.position.set(0, 0.088, 0.03);
+  root.add(scopeCollar);
+
+  const turretTop = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.014, 10), m.gunmetal);
+  turretTop.position.set(0, 0.112, -0.04);
+  root.add(turretTop);
 
   [-0.02, -0.1].forEach((rz) => {
     const mount = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.04, 0.024), m.gunmetal);

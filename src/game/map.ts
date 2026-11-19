@@ -112,13 +112,64 @@ export function buildTacticalArena(maxAnisotropy = 8): TacticalArena {
     metalness: 0.82,
   });
 
-  // 3. Arena Floor (80x80m)
+  const hazardEdgeTex = hazardTex.clone();
+  hazardEdgeTex.needsUpdate = true;
+  hazardEdgeTex.repeat.set(28, 1);
+
+  const hazardTrimMat = new THREE.MeshStandardMaterial({
+    map: hazardEdgeTex,
+    roughness: 0.44,
+    metalness: 0.45,
+  });
+
+  const controlGlassMat = new THREE.MeshPhysicalMaterial({
+    color: 0x38bdf8,
+    roughness: 0.08,
+    metalness: 0.1,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05,
+    transparent: true,
+    opacity: 0.34,
+    side: THREE.DoubleSide,
+  });
+
+  const cyanGlowMat = new THREE.MeshStandardMaterial({
+    color: 0x06b6d4,
+    emissive: 0x06b6d4,
+    emissiveIntensity: 1.65,
+    roughness: 0.15,
+  });
+
+  const redAlertGlowMat = new THREE.MeshStandardMaterial({
+    color: 0xff1e42,
+    emissive: 0xff1e42,
+    emissiveIntensity: 2.0,
+    roughness: 0.15,
+  });
+
+  // 3. Arena Floor (80x80m) + Yellow-Black Perimeter Hazard Trim
   const floorGeo = new THREE.PlaneGeometry(80, 80);
   floorGeo.rotateX(-Math.PI / 2);
   const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.receiveShadow = true;
   arenaGroup.add(floor);
   obstacleMeshes.push(floor);
+
+  const trimGeoNS = new THREE.BoxGeometry(79.4, 0.06, 0.95);
+  [-39.45, 39.45].forEach((tz) => {
+    const trim = new THREE.Mesh(trimGeoNS, hazardTrimMat);
+    trim.position.set(0, 0.03, tz);
+    trim.receiveShadow = true;
+    arenaGroup.add(trim);
+  });
+
+  const trimGeoEW = new THREE.BoxGeometry(0.95, 0.06, 78.0);
+  [-39.45, 39.45].forEach((tx) => {
+    const trim = new THREE.Mesh(trimGeoEW, hazardTrimMat);
+    trim.position.set(tx, 0.03, 0);
+    trim.receiveShadow = true;
+    arenaGroup.add(trim);
+  });
 
   function addCollision(
     minX: number,
@@ -480,6 +531,207 @@ export function buildTacticalArena(maxAnisotropy = 8): TacticalArena {
   createEnergyCore(28, 28, 0xf59e0b, 4.6);
   createEnergyCore(0, 0, 0x06b6d4, platElevation + 0.2);
 
+  // 9B. Four Corner Glowing Reactor Containment Tubes
+  function createReactorTube(rx: number, rz: number) {
+    const rGroup = new THREE.Group();
+    rGroup.position.set(rx, 0, rz);
+
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.65, 1.85, 0.7, 8), metalTrussMat);
+    plinth.position.y = 0.35;
+    plinth.castShadow = true;
+    plinth.receiveShadow = true;
+    rGroup.add(plinth);
+    obstacleMeshes.push(plinth);
+
+    const topCap = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.55, 0.75, 8), metalTrussMat);
+    topCap.position.y = 5.45;
+    topCap.castShadow = true;
+    rGroup.add(topCap);
+
+    // Glass containment cylinder
+    const glassTube = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.12, 1.12, 4.4, 20, 1, true),
+      controlGlassMat
+    );
+    glassTube.position.y = 2.9;
+    rGroup.add(glassTube);
+    obstacleMeshes.push(glassTube);
+
+    // 4 External Armored Containment Struts
+    for (let s = 0; s < 4; s++) {
+      const ang = (s * Math.PI) / 2 + Math.PI / 4;
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.5, 0.22), railMat);
+      strut.position.set(Math.cos(ang) * 1.28, 2.9, Math.sin(ang) * 1.28);
+      strut.rotation.y = -ang;
+      strut.castShadow = true;
+      rGroup.add(strut);
+    }
+
+    // Inner Rotating Plasma Core + Orbital Ring
+    const coreRod = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 4.1, 12), cyanGlowMat);
+    coreRod.position.y = 2.9;
+    const coreOrb = new THREE.Mesh(new THREE.TorusGeometry(0.74, 0.08, 8, 20), cyanGlowMat);
+    coreOrb.rotation.x = Math.PI / 3;
+    coreRod.add(coreOrb);
+    rGroup.add(coreRod);
+    energyCores.push(coreRod);
+
+    const rLight = new THREE.PointLight(0x06b6d4, 18, 24, 1.35);
+    rLight.position.y = 2.9;
+    rGroup.add(rLight);
+
+    arenaGroup.add(rGroup);
+    addCollision(rx - 1.65, 0, rz - 1.65, rx + 1.65, 5.8, rz + 1.65, 'pillar', plinth);
+    radarRects.push({ x: rx, z: rz, w: 3.2, d: 3.2, kind: 'platform' });
+  }
+
+  createReactorTube(-35.2, -35.2);
+  createReactorTube(35.2, -35.2);
+  createReactorTube(-35.2, 35.2);
+  createReactorTube(35.2, 35.2);
+
+  // 9C. Massive Structural Support Pillars & High Gantry Trusses
+  function createStructuralPillar(px: number, pz: number) {
+    const pGroup = new THREE.Group();
+    pGroup.position.set(px, 0, pz);
+
+    const base = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.8, 2.1), metalTrussMat);
+    base.position.y = 0.4;
+    base.castShadow = true;
+    base.receiveShadow = true;
+    pGroup.add(base);
+    obstacleMeshes.push(base);
+
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(1.45, 7.6, 1.45), wallMat);
+    shaft.position.y = 4.2;
+    shaft.castShadow = true;
+    shaft.receiveShadow = true;
+    pGroup.add(shaft);
+    obstacleMeshes.push(shaft);
+
+    const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(1.52, 5.2, 0.14), cyanGlowMat);
+    ledStrip.position.y = 4.1;
+    pGroup.add(ledStrip);
+
+    const hazBand = new THREE.Mesh(new THREE.BoxGeometry(2.14, 0.22, 2.14), hazardTrimMat);
+    hazBand.position.y = 0.85;
+    pGroup.add(hazBand);
+
+    arenaGroup.add(pGroup);
+    addCollision(px - 1.05, 0, pz - 1.05, px + 1.05, 8.0, pz + 1.05, 'pillar', shaft);
+    radarRects.push({ x: px, z: pz, w: 2.1, d: 2.1, kind: 'wall' });
+  }
+
+  createStructuralPillar(-33, -14);
+  createStructuralPillar(33, -14);
+  createStructuralPillar(-33, 14);
+  createStructuralPillar(33, 14);
+  createStructuralPillar(-15, -34);
+  createStructuralPillar(15, -34);
+
+  // Overhead High Gantry Trusses (y = 7.7m, clear of player movement)
+  [-14, 14].forEach((gz) => {
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(66, 0.65, 0.9), metalTrussMat);
+    beam.position.set(0, 7.7, gz);
+    arenaGroup.add(beam);
+  });
+
+  // 9D. Elevated Glass Control Room (North Perimeter Command Bay)
+  {
+    const ctrlX = 0;
+    const ctrlZ = -36.5;
+    const ctrlW = 14.0;
+    const ctrlD = 5.4;
+    const ctrlGroup = new THREE.Group();
+    ctrlGroup.position.set(ctrlX, 0, ctrlZ);
+
+    // Lower Armored Bunker Wall
+    const lowerWall = new THREE.Mesh(new THREE.BoxGeometry(ctrlW, 1.55, ctrlD), wallMat);
+    lowerWall.position.y = 0.775;
+    lowerWall.castShadow = true;
+    lowerWall.receiveShadow = true;
+    ctrlGroup.add(lowerWall);
+    obstacleMeshes.push(lowerWall);
+
+    // Corner mullions + Roof Deck
+    [-ctrlW / 2 + 0.45, ctrlW / 2 - 0.45].forEach((mx) => {
+      const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.3, ctrlD), metalTrussMat);
+      mullion.position.set(mx, 2.7, 0);
+      mullion.castShadow = true;
+      ctrlGroup.add(mullion);
+      obstacleMeshes.push(mullion);
+    });
+
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(ctrlW + 0.6, 0.75, ctrlD + 0.7), metalTrussMat);
+    roof.position.set(0, 4.2, 0.15);
+    roof.castShadow = true;
+    roof.receiveShadow = true;
+    ctrlGroup.add(roof);
+    obstacleMeshes.push(roof);
+
+    const roofStrip = new THREE.Mesh(new THREE.BoxGeometry(ctrlW - 1.2, 0.12, 0.14), cyanGlowMat);
+    roofStrip.position.set(0, 3.92, ctrlD / 2 + 0.42);
+    ctrlGroup.add(roofStrip);
+
+    // Ballistic Observation Glass Window (Front + Sides)
+    const frontGlass = new THREE.Mesh(new THREE.PlaneGeometry(ctrlW - 1.8, 2.25), controlGlassMat);
+    frontGlass.position.set(0, 2.68, ctrlD / 2 - 0.15);
+    ctrlGroup.add(frontGlass);
+    obstacleMeshes.push(frontGlass);
+
+    // Interior Tactical Console & Glowing Holographic Screens
+    const consoleDesk = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.9, 1.2), metalTrussMat);
+    consoleDesk.position.set(0, 1.95, 0.55);
+    ctrlGroup.add(consoleDesk);
+
+    [-2.8, 0, 2.8].forEach((sx) => {
+      const monitor = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.95, 0.08), cyanGlowMat);
+      monitor.position.set(sx, 2.75, 0.35);
+      monitor.rotation.x = -0.2;
+      ctrlGroup.add(monitor);
+    });
+
+    const ctrlLight = new THREE.PointLight(0x38bdf8, 14, 16, 1.4);
+    ctrlLight.position.set(0, 3.3, 0.2);
+    ctrlGroup.add(ctrlLight);
+
+    arenaGroup.add(ctrlGroup);
+    addCollision(
+      ctrlX - ctrlW / 2,
+      0,
+      ctrlZ - ctrlD / 2,
+      ctrlX + ctrlW / 2,
+      4.6,
+      ctrlZ + ctrlD / 2,
+      'wall',
+      lowerWall
+    );
+    radarRects.push({ x: ctrlX, z: ctrlZ, w: ctrlW, d: ctrlD, kind: 'wall' });
+  }
+
+  // 9E. Red Emergency Spotlights on Arena Choke Points (Zero Shadow Maps for 60 FPS)
+  [
+    [-21, 7.6, -14, -15, 0, -10],
+    [21, 7.6, -14, 15, 0, -10],
+    [-21, 7.6, 14, -15, 0, 10],
+    [21, 7.6, 14, 15, 0, 10],
+  ].forEach(([sx, sy, sz, tx, ty, tz]) => {
+    const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.32, 0.42, 10), metalTrussMat);
+    housing.position.set(sx, sy, sz);
+    arenaGroup.add(housing);
+
+    const lens = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), redAlertGlowMat);
+    lens.position.set(sx, sy - 0.2, sz);
+    arenaGroup.add(lens);
+
+    const spot = new THREE.SpotLight(0xff1e42, 34, 30, Math.PI / 5.2, 0.58, 1.35);
+    spot.position.set(sx, sy - 0.25, sz);
+    spot.castShadow = false;
+    spot.target.position.set(tx, ty, tz);
+    arenaGroup.add(spot);
+    arenaGroup.add(spot.target);
+  });
+
   // 10. Spawns & Patrol Waypoints
   const playerSpawn = new THREE.Vector3(0, 1.75, 31);
 
@@ -488,7 +740,7 @@ export function buildTacticalArena(maxAnisotropy = 8): TacticalArena {
     new THREE.Vector3(28, 0, -14),
     new THREE.Vector3(-30, 0, 16),
     new THREE.Vector3(30, 0, 16),
-    new THREE.Vector3(0, 0, -32),
+    new THREE.Vector3(0, 0, -30.5),
     new THREE.Vector3(-21, 0, -4),
     new THREE.Vector3(21, 0, -4)
   );

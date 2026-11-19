@@ -60,38 +60,76 @@ export function createFloorTextures(maxAnisotropy = 8): {
     bctx.fillRect(x, y, 2, 2);
   }
 
-  // Modular 256x256 concrete slabs
+  // Modular 256x256 concrete slabs + recessed metal floor grating inlays
   const tile = 256;
   for (let x = 0; x < size; x += tile) {
     for (let y = 0; y < size; y += tile) {
+      const isGrateBay = (x / tile + y / tile) % 2 === 1;
+
       // Recessed expansion seam
-      actx.strokeStyle = '#0c1017';
-      actx.lineWidth = 6;
+      actx.strokeStyle = '#0a0e15';
+      actx.lineWidth = 7;
       actx.strokeRect(x, y, tile, tile);
 
-      bctx.strokeStyle = '#202020';
-      bctx.lineWidth = 6;
+      bctx.strokeStyle = '#181818';
+      bctx.lineWidth = 7;
       bctx.strokeRect(x, y, tile, tile);
 
       // Inner bevel trim
-      actx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+      actx.strokeStyle = 'rgba(148, 163, 184, 0.16)';
       actx.lineWidth = 2;
       actx.strokeRect(x + 12, y + 12, tile - 24, tile - 24);
 
-      bctx.strokeStyle = '#a0a0a0';
+      bctx.strokeStyle = '#a8a8a8';
       bctx.lineWidth = 2;
       bctx.strokeRect(x + 12, y + 12, tile - 24, tile - 24);
 
-      // Tactical zone marking lines on alternating tiles
-      if ((x / tile + y / tile) % 2 === 0) {
-        actx.fillStyle = 'rgba(6, 182, 212, 0.35)';
-        actx.fillRect(x + 28, y + tile - 34, 68, 4);
+      if (isGrateBay) {
+        // Metal grating floor plate inlay
+        const gx = x + 26;
+        const gy = y + 26;
+        const gs = tile - 52;
 
-        actx.fillStyle = 'rgba(245, 158, 11, 0.45)';
-        actx.fillRect(x + tile - 52, y + 28, 24, 4);
+        // Deep subfloor shadow cavity
+        actx.fillStyle = '#090d14';
+        actx.fillRect(gx, gy, gs, gs);
+        bctx.fillStyle = '#222222';
+        bctx.fillRect(gx, gy, gs, gs);
+
+        // Diagonal/cross steel grating bars
+        actx.fillStyle = '#273244';
+        bctx.fillStyle = '#cfcfcf';
+        const step = 16;
+        for (let ix = gx + 6; ix < gx + gs - 4; ix += step) {
+          actx.fillRect(ix, gy + 4, 4, gs - 8);
+          bctx.fillRect(ix, gy + 4, 4, gs - 8);
+        }
+        for (let iy = gy + 6; iy < gy + gs - 4; iy += step) {
+          actx.fillRect(gx + 4, iy, gs - 8, 4);
+          bctx.fillRect(gx + 4, iy, gs - 8, 4);
+        }
+
+        // Specular bevel frame around grating bay
+        actx.strokeStyle = '#3b4a62';
+        actx.lineWidth = 5;
+        actx.strokeRect(gx - 2, gy - 2, gs + 4, gs + 4);
+        bctx.strokeStyle = '#e2e2e2';
+        bctx.lineWidth = 5;
+        bctx.strokeRect(gx - 2, gy - 2, gs + 4, gs + 4);
+
+        // Subtle cyan floor conduit stripe
+        actx.fillStyle = 'rgba(6, 182, 212, 0.28)';
+        actx.fillRect(x + 28, y + tile - 18, tile - 56, 2);
+      } else {
+        // Tactical zone marking lines on concrete tiles
+        actx.fillStyle = 'rgba(6, 182, 212, 0.42)';
+        actx.fillRect(x + 28, y + tile - 34, 72, 4);
+
+        actx.fillStyle = 'rgba(245, 158, 11, 0.48)';
+        actx.fillRect(x + tile - 56, y + 28, 28, 4);
 
         // Stencil coordinate
-        actx.fillStyle = 'rgba(148, 163, 184, 0.25)';
+        actx.fillStyle = 'rgba(148, 163, 184, 0.32)';
         actx.font = 'bold 14px monospace';
         actx.fillText(`SEC-${x / tile}${y / tile}`, x + 28, y + 40);
       }
@@ -104,14 +142,14 @@ export function createFloorTextures(maxAnisotropy = 8): {
         [x + tile - 18, y + tile - 18],
       ];
       bolts.forEach(([bx, by]) => {
-        actx.fillStyle = '#334155';
+        actx.fillStyle = '#475569';
         actx.beginPath();
-        actx.arc(bx, by, 3, 0, Math.PI * 2);
+        actx.arc(bx, by, 3.2, 0, Math.PI * 2);
         actx.fill();
 
-        bctx.fillStyle = '#d8d8d8';
+        bctx.fillStyle = '#e0e0e0';
         bctx.beginPath();
-        bctx.arc(bx, by, 3, 0, Math.PI * 2);
+        bctx.arc(bx, by, 3.2, 0, Math.PI * 2);
         bctx.fill();
       });
     }
@@ -162,39 +200,51 @@ export function createWallTextures(maxAnisotropy = 8): {
 
   const panelH = 128;
   for (let y = 0; y < size; y += panelH) {
-    // Raised armor plating
-    actx.fillStyle = y % 256 === 0 ? '#232c3b' : '#1e2634';
+    // Raised concrete-steel armor cladding
+    actx.fillStyle = y % 256 === 0 ? '#242e3e' : '#1d2534';
     actx.fillRect(6, y + 6, size - 12, panelH - 12);
 
-    bctx.fillStyle = '#b0b0b0';
+    bctx.fillStyle = '#b4b4b4';
     bctx.fillRect(6, y + 6, size - 12, panelH - 12);
 
-    // Recessed vertical vents
+    // Subtle steel plate highlight edge
+    actx.strokeStyle = 'rgba(148, 163, 184, 0.16)';
+    actx.lineWidth = 2;
+    actx.strokeRect(10, y + 10, size - 20, panelH - 20);
+
+    // Recessed vertical vents with louver slats
     for (let vx = 32; vx < size - 48; vx += 64) {
-      actx.fillStyle = '#111620';
+      actx.fillStyle = '#0f141e';
       actx.fillRect(vx, y + 26, 36, panelH - 52);
-      bctx.fillStyle = '#383838';
+      bctx.fillStyle = '#303030';
       bctx.fillRect(vx, y + 26, 36, panelH - 52);
+
+      actx.fillStyle = '#283346';
+      bctx.fillStyle = '#8e8e8e';
+      for (let sy = y + 32; sy < y + panelH - 32; sy += 12) {
+        actx.fillRect(vx + 4, sy, 28, 4);
+        bctx.fillRect(vx + 4, sy, 28, 4);
+      }
     }
 
     // Panel seam
-    actx.strokeStyle = '#090d14';
+    actx.strokeStyle = '#070a10';
     actx.lineWidth = 6;
     actx.strokeRect(0, y, size, panelH);
 
-    bctx.strokeStyle = '#181818';
+    bctx.strokeStyle = '#141414';
     bctx.lineWidth = 6;
     bctx.strokeRect(0, y, size, panelH);
 
     // Rivet line
     for (let rx = 20; rx < size - 16; rx += 32) {
-      actx.fillStyle = '#475569';
+      actx.fillStyle = '#53627a';
       actx.beginPath();
       actx.arc(rx, y + 14, 2.5, 0, Math.PI * 2);
       actx.arc(rx, y + panelH - 14, 2.5, 0, Math.PI * 2);
       actx.fill();
 
-      bctx.fillStyle = '#f0f0f0';
+      bctx.fillStyle = '#f2f2f2';
       bctx.beginPath();
       bctx.arc(rx, y + 14, 2.5, 0, Math.PI * 2);
       bctx.arc(rx, y + panelH - 14, 2.5, 0, Math.PI * 2);
@@ -202,9 +252,11 @@ export function createWallTextures(maxAnisotropy = 8): {
     }
   }
 
-  // Glowing cyan/amber accent line
+  // Glowing cyan tech conduit & facility stencil
   actx.fillStyle = '#06b6d4';
   actx.fillRect(16, 248, size - 32, 4);
+  actx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+  actx.fillRect(16, 120, size - 32, 2);
   actx.fillStyle = '#f59e0b';
   actx.font = 'bold 20px monospace';
   actx.fillText('GIS-FACILITY // SECTOR 07', 24, 232);
@@ -612,3 +664,79 @@ export function createHangarDeckTexture(maxAnisotropy = 8): {
   return { map, bumpMap };
 }
 
+/**
+ * Shared Brushed Titanium & Scuffed Armor PBR Maps for 3-Class Enemy Units
+ */
+export function createArmorWearTextures(maxAnisotropy = 4): {
+  roughnessMap: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+} {
+  if (textureCache['armor_rough'] && textureCache['armor_bump']) {
+    return {
+      roughnessMap: textureCache['armor_rough'],
+      bumpMap: textureCache['armor_bump'],
+    };
+  }
+
+  const size = 256;
+  const rc = document.createElement('canvas');
+  const bc = document.createElement('canvas');
+  rc.width = rc.height = size;
+  bc.width = bc.height = size;
+  const rctx = rc.getContext('2d')!;
+  const bctx = bc.getContext('2d')!;
+
+  rctx.fillStyle = '#606060';
+  rctx.fillRect(0, 0, size, size);
+  bctx.fillStyle = '#808080';
+  bctx.fillRect(0, 0, size, size);
+
+  // Machined brushed grain
+  for (let i = 0; i < 800; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const len = 10 + Math.random() * 28;
+    rctx.strokeStyle = Math.random() > 0.5 ? 'rgba(215,215,215,0.16)' : 'rgba(35,35,35,0.18)';
+    rctx.lineWidth = 1;
+    rctx.beginPath();
+    rctx.moveTo(x, y);
+    rctx.lineTo(x + len, y);
+    rctx.stroke();
+
+    bctx.strokeStyle = Math.random() > 0.5 ? 'rgba(185,185,185,0.22)' : 'rgba(65,65,65,0.22)';
+    bctx.beginPath();
+    bctx.moveTo(x, y);
+    bctx.lineTo(x + len, y);
+    bctx.stroke();
+  }
+
+  // Armor panel seam lines + micro-scuffs
+  bctx.strokeStyle = '#383838';
+  bctx.lineWidth = 3;
+  bctx.strokeRect(8, 8, size - 16, size - 16);
+  bctx.beginPath();
+  bctx.moveTo(8, size / 2);
+  bctx.lineTo(size - 8, size / 2);
+  bctx.stroke();
+
+  for (let i = 0; i < 55; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    rctx.strokeStyle = 'rgba(235,235,235,0.28)';
+    rctx.lineWidth = 1.2;
+    rctx.beginPath();
+    rctx.moveTo(x, y);
+    rctx.lineTo(x + (Math.random() - 0.5) * 18, y + (Math.random() - 0.5) * 18);
+    rctx.stroke();
+  }
+
+  const roughnessMap = configureTexture(new THREE.CanvasTexture(rc), false, maxAnisotropy);
+  roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
+
+  const bumpMap = configureTexture(new THREE.CanvasTexture(bc), false, maxAnisotropy);
+  bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
+
+  textureCache['armor_rough'] = roughnessMap;
+  textureCache['armor_bump'] = bumpMap;
+  return { roughnessMap, bumpMap };
+}

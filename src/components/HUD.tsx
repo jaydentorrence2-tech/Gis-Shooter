@@ -297,7 +297,7 @@ export const HUD: React.FC<HUDProps> = React.memo(({ state, profile }) => {
       )}
 
       {/* Low Health Border Warning */}
-      {state.health > 0 && state.health <= 25 && (
+      {state.health > 0 && state.health <= state.maxHealth * 0.25 && (
         <div
           className="absolute inset-0 pointer-events-none"
           style={{ boxShadow: 'inset 0 0 60px rgba(220, 38, 38, 0.45)' }}
@@ -561,7 +561,7 @@ export const HUD: React.FC<HUDProps> = React.memo(({ state, profile }) => {
         <div className="bg-[#0C1017]/90 border border-slate-700/80 rounded-xl px-4 py-2.5 w-68">
           <div className="flex justify-between items-center text-xs font-mono-tech font-bold mb-1">
             <span className="flex items-center gap-1.5 text-cyan-400">
-              <Shield className="w-3.5 h-3.5 fill-cyan-500 text-cyan-500" /> ARMOR
+              <Shield className="w-3.5 h-3.5 fill-cyan-500 text-cyan-500" /> SHIELD
             </span>
             <span className="text-white">
               {Math.round(state.armor)} / {state.maxArmor}
